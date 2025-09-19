@@ -1,7 +1,7 @@
 import { Component, signal, AfterViewInit } from '@angular/core';
 import * as THREE from "three"
 import { OrbitControls } from "three/addons/controls/OrbitControls.js"
-import { EntitySpawner } from '../loaders/EntitySpawner';
+import { EntityLoader } from '@/loaders/EntityLoader';
 
 @Component({
   selector: 'app-root',
@@ -16,8 +16,11 @@ export class App implements AfterViewInit {
   protected readonly title = signal('3d_man');
   constructor(private window: Window) { }
 
+  protected animationActions: THREE.AnimationAction[] = new Array();
+  protected mixer: THREE.AnimationMixer | undefined;
+
   async ngAfterViewInit(): Promise<void> {
-    const width = window.innerWidth, height = window.innerHeight;
+    const width = this.window.innerWidth, height = this.window.innerHeight;
 
     // init
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000);
@@ -38,24 +41,40 @@ export class App implements AfterViewInit {
     scene.add(dirLight);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    // set renderer color space (newer three.js)
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
     const controls = new OrbitControls(camera, renderer.domElement)
 
     renderer.setSize(width, height);
-    renderer.setAnimationLoop(animate);
-    document.body.appendChild(renderer.domElement);
+    renderer.setAnimationLoop(animate.bind(this));
 
-    const root = await new EntitySpawner().spawnObject('/models/young.fbx');
-    root.scale.setScalar(0.01);
-    scene.add(root);
+    document.body.appendChild(renderer.domElement);
+    const entityLoader = new EntityLoader();
+
+    const model = await entityLoader.loadObjectAsync('/models/Y Bot.fbx');
+    model.scale.setScalar(0.01);
+    scene.add(model);
+
+    this.mixer = new THREE.AnimationMixer(model);
+    var modelReady: boolean = false;
+    entityLoader.loadObject('/models/Capoeira.fbx', (object) => {
+      if (this.mixer) {
+        const animationAction = this.mixer.clipAction(object.animations[0])
+        modelReady = true;
+        animationAction.play();
+        this.animationActions.push(animationAction)
+      }
+    });
+
+    const clock = new THREE.Clock()
 
     // animation
     function animate(time: number) {
-      // requestAnimationFrame(animate);
+      if (modelReady) {
+        this.mixer?.update(clock.getDelta());
+      }
 
       controls.update();
       renderer.render(scene, camera);
     }
+
   }
 }

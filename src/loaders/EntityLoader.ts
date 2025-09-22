@@ -1,5 +1,5 @@
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import * as THREE from "three"
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import * as THREE from 'three';
 
 type TextureSet = {
   baseColor: THREE.Texture;
@@ -8,21 +8,27 @@ type TextureSet = {
   orm?: THREE.Texture; // R=AO, G=Roughness, B=Metalness
 };
 
+// TODO: maybe i should add a custom loader type to the parameters
 export class EntityLoader {
+  private loadedObject: THREE.Group<THREE.Object3DEventMap>[] = new Array();
+
   public async loadObjectAsync(path: string, textures?: TextureSet): Promise<THREE.Object3D> {
-    // TODO: add custom loader type in parameters
     const fbxLoader = new FBXLoader();
-    const root = await fbxLoader.loadAsync(path);
+    const object = await fbxLoader.loadAsync(path);
 
     if (textures) {
-      this.applyTexturesToObject(root, textures);
+      this.applyTexturesToObject(object, textures);
     }
 
-    return root;
+    this.loadedObject.push(object);
+    return object;
   }
 
-  public loadObject(path: string, onLoad: (data: any) => void, textures?: TextureSet): THREE.Object3D {
-    // TODO: add custom loader type in parameters
+  public loadObject(
+    path: string,
+    onLoad: (data: THREE.Group<THREE.Object3DEventMap>) => void,
+    textures?: TextureSet
+  ): THREE.Object3D {
     const fbxLoader = new FBXLoader();
     fbxLoader.load(path, (object) => {
       onLoad(object);
@@ -31,6 +37,7 @@ export class EntityLoader {
         this.applyTexturesToObject(object, textures);
       }
 
+      this.loadedObject.push(object);
       return object;
     });
 
@@ -47,7 +54,10 @@ export class EntityLoader {
         const geometry: THREE.BufferGeometry = child.geometry;
 
         if (!geometry.getAttribute('uv2') && geometry.getAttribute('uv')) {
-          geometry.setAttribute('uv2', new THREE.BufferAttribute((geometry.getAttribute('uv')).array, 2));
+          geometry.setAttribute(
+            'uv2',
+            new THREE.BufferAttribute(geometry.getAttribute('uv').array, 2)
+          );
         }
 
         child.material = new THREE.MeshStandardMaterial({
@@ -65,5 +75,4 @@ export class EntityLoader {
       }
     });
   }
-
 }

@@ -1,18 +1,24 @@
-import { EntityLoader } from '@/loaders/EntityLoader';
+import { EntityLoader } from '@/loaders/entity-loader';
 import { AnimatorService } from '@/services/animator-service';
 import { EmotionService } from '@/services/emotion-service';
 import { SpeechService } from '@/services/speech-service';
 import { ThreeService } from '@/services/three-service';
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Tickable } from '../tickable';
 
 @Component({
   selector: 'app-character',
   imports: [],
   templateUrl: './character.html',
   styleUrl: './character.scss',
+  providers: [
+    { provide: Tickable, useExisting: Character },
+    // { provide: Tickable, useClass: AnimatorService },
+  ],
 })
-export class Character implements OnInit, OnDestroy {
+export class Character implements OnInit, OnDestroy, Tickable {
   private loader: EntityLoader;
+  private animatorService!: AnimatorService;
 
   constructor(
     public threeService: ThreeService,
@@ -29,25 +35,22 @@ export class Character implements OnInit, OnDestroy {
 
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
-    const isAnimating = this.emotionService.isAnimating();
     const isSpeaking = this.speechService.isSpeaking();
 
-    if (isAnimating) {
-      return `${this.getEmotionLabel(emotion)}`;
-    } else if (isSpeaking) {
+    if (isSpeaking) {
       return `${this.speechText()}`;
-    } else {
-      return `${this.getEmotionLabel(emotion)}`;
     }
+
+    return `${this.getEmotionLabel(emotion)}`;
   });
 
   emotions = [
-    { value: 'neutral', label: 'Neutral' },
-    { value: 'happy', label: 'Happy' },
-    { value: 'sad', label: 'Sad' },
-    { value: 'angry', label: 'Angry' },
-    { value: 'surprised', label: 'Surprised' },
-    { value: 'confused', label: 'Confused' },
+    { value: 'neutral', label: 'Neutral', path: '/models/Capoeira.fbx' },
+    { value: 'happy', label: 'Happy', path: '' },
+    { value: 'sad', label: 'Sad', path: '' },
+    { value: 'angry', label: 'Angry', path: '' },
+    { value: 'surprised', label: 'Surprised', path: '' },
+    { value: 'confused', label: 'Confused', path: '' },
   ];
 
   async spawn() {
@@ -56,20 +59,15 @@ export class Character implements OnInit, OnDestroy {
     model.scale.setScalar(0.01);
     scene.add(model);
 
-    const animMap = new Map<string, string>([
-      // [this.emotions[0].value, ''],
-      // [this.emotions[1].value, ''],
-      // [this.emotions[2].value, ''],
-      // [this.emotions[3].value, ''],
-    ]);
+    const animMap = new Map<string, string>();
 
     // TODO: refactor this part, maybe add path to animation into emotions array
-    for (const { value } of this.emotions) {
-      animMap.set(value, '');
+    for (const { value, path } of this.emotions) {
+      animMap.set(value, path);
     }
 
-    const mixer = new AnimatorService(model);
-    mixer.init(animMap);
+    this.animatorService = new AnimatorService(model);
+    this.animatorService.setMap(animMap);
   }
 
   ngOnInit(): void {
@@ -77,6 +75,10 @@ export class Character implements OnInit, OnDestroy {
     this.spawn();
     this.selectedEmotion.set('neutral');
     this.emotionService.setEmotion('neutral');
+
+    setTimeout(() => {
+      this.setEmotion('neutral');
+    }, 2000);
   }
 
   ngOnDestroy(): void {
@@ -102,4 +104,16 @@ export class Character implements OnInit, OnDestroy {
     const emotionData = this.emotions.find((e) => e.value === emotion);
     return emotionData?.label || emotion;
   }
+
+  onEmotionChange() {
+    this.setEmotion(this.selectedEmotion());
+  }
+
+  setEmotion(emotion: string) {
+    this.selectedEmotion.set(emotion);
+    this.emotionService.setEmotion(emotion);
+    this.animatorService.playAnimation(emotion);
+  }
+
+  update(deltaTime: number) {}
 }

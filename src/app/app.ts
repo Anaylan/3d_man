@@ -1,8 +1,9 @@
-import { Component, signal, AfterViewInit, OnInit } from '@angular/core';
+import { Component, signal, OnInit, QueryList, ViewChildren } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
 import { Character } from './character/character';
+import { Tickable } from './tickable';
 
 @Component({
   selector: 'app-root',
@@ -13,6 +14,8 @@ import { Character } from './character/character';
   styleUrl: './app.scss',
 })
 export class App implements OnInit {
+  @ViewChildren(Tickable) private updatableChildren!: QueryList<Tickable>;
+
   protected readonly title = signal('3d_man');
 
   constructor(public threeService: ThreeService, private window: Window) {}
@@ -20,6 +23,7 @@ export class App implements OnInit {
   private camera!: THREE.PerspectiveCamera;
   private clock: THREE.Clock = new THREE.Clock();
   private renderer!: THREE.WebGLRenderer;
+  private controls!: OrbitControls;
 
   protected init() {
     const width = this.window.innerWidth,
@@ -37,18 +41,17 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     this.init();
-
-    const controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.renderer.setAnimationLoop(animate.bind(this));
-
-    // animation
-    function animate(time: number) {
-      // if (modelReady && mixer) {
-      //   mixer.update(this.clock.getDelta());
-      // }
-
-      controls.update();
-      this.renderer.render(this.scene, this.camera);
-    }
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.renderer.setAnimationLoop(this.animate);
   }
+
+  private animate = (time: number) => {
+    this.controls.update();
+
+    if (this.updatableChildren) {
+      this.updatableChildren.forEach((child) => child.update(this.clock.getDelta()));
+    }
+
+    this.renderer.render(this.scene, this.camera);
+  };
 }

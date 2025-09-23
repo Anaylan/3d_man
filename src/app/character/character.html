@@ -1,1 +1,100 @@
-<!-- <p>character works!</p> -->
+<div class="flex flex-col pointer-events-none fixed inset-0 flex items-start justify-start p-4">
+  <div
+    class="pointer-events-auto w-full max-w-2xl rounded-xl border border-slate-200 bg-white/80 p-4 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/80"
+  >
+    <h3 class="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Character Control</h3>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="col-span-1">
+        <label
+          for="emotionSelect"
+          class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >Emotion</label
+        >
+        <select
+          id="emotionSelect"
+          [(ngModel)]="selectedEmotion"
+          (change)="onEmotionChange()"
+          class="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+        >
+          @for (emotion of emotions; track emotion.value) {
+          <option [value]="emotion.value">{{ emotion.label }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="col-span-1">
+        <label
+          for="voiceSelect"
+          class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >Voice</label
+        >
+        <select
+          [(ngModel)]="selectedVoice"
+          id="voiceSelect"
+          class="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+        >
+          @for (voice of speechService.voices(); track voice.name) {
+          <option [value]="voice.name">{{ voice.name }} ({{ voice.lang }})</option>
+          }
+        </select>
+      </div>
+
+      <div class="col-span-1 sm:col-span-2">
+        <label
+          for="speechText"
+          class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >Speech text</label
+        >
+        <div class="flex gap-2">
+          <input
+            type="text"
+            id="speechText"
+            [(ngModel)]="speechText"
+            placeholder="Type text..."
+            (keyup.enter)="speak()"
+            class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+          />
+          <button
+            (click)="speak()"
+            [disabled]="speechService.isSpeaking() || !speechText().trim()"
+            class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Speak
+          </button>
+          <button
+            (click)="stopSpeaking()"
+            [disabled]="!speechService.isSpeaking()"
+            class="inline-flex items-center justify-center rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
+          >
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div class="col-span-1 sm:col-span-2">
+        <label
+          for="speedRange"
+          class="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
+        >
+          Speech speed: <span class="tabular-nums">{{ speechSpeed() }}</span>
+        </label>
+        <input
+          type="range"
+          id="speedRange"
+          min="0.5"
+          max="3"
+          step="0.1"
+          [(ngModel)]="speechSpeed"
+          class="w-full accent-indigo-600"
+        />
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="pointer-events-auto mt-3 w-full max-w-2xl rounded-xl border border-slate-200 bg-white/80 p-3 text-sm text-slate-700 shadow backdrop-blur dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"
+  >
+    {{ currentStatus() }}
+  </div>
+</div>

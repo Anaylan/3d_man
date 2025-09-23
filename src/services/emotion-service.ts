@@ -7,7 +7,6 @@ export interface EmotionConfig {}
 })
 export class EmotionService {
   currentEmotion = signal('neutral');
-  isAnimating = signal(false);
 
   private emotionConfigs: Record<string, EmotionConfig> = {
     neutral: {},
@@ -21,16 +20,7 @@ export class EmotionService {
   constructor() {}
 
   async setEmotion(emotion: string) {
-    if (this.isAnimating()) return;
-
     this.currentEmotion.set(emotion);
-    this.isAnimating.set(true);
-
-    try {
-      // TODO: maybe bind listener?
-    } finally {
-      this.isAnimating.set(false);
-    }
   }
 
   getEmotionConfig(emotion: string): EmotionConfig {

@@ -53,14 +53,6 @@ export class ThreeService {
     this.scene.add(directionalLight);
   }
 
-  public startRenderLoop(): void {
-    const animate = () => {
-      this.renderer.render(this.scene, this.camera);
-    };
-
-    animate();
-  }
-
   public getScene(): THREE.Scene {
     return this.scene;
   }

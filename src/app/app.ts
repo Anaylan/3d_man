@@ -1,9 +1,9 @@
-import { Component, signal, OnInit, QueryList, ViewChildren } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
+import { TickService } from '@/services/tick-service';
 import { Character } from './character/character';
-import { Tickable } from './tickable';
 
 @Component({
   selector: 'app-root',
@@ -13,12 +13,14 @@ import { Tickable } from './tickable';
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
-export class App implements OnInit {
-  @ViewChildren(Tickable) private updatableChildren!: QueryList<Tickable>;
-
+export class App implements OnInit, OnDestroy {
   protected readonly title = signal('3d_man');
 
-  constructor(public threeService: ThreeService, private window: Window) {}
+  constructor(
+    public threeService: ThreeService,
+    private window: Window,
+    private tickService: TickService
+  ) {}
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private clock: THREE.Clock = new THREE.Clock();
@@ -32,7 +34,11 @@ export class App implements OnInit {
     this.scene = this.threeService.createScene();
     this.camera = this.threeService.createCamera(width, height, 70, 0.1, 1000);
     this.threeService.createLights();
-    this.renderer = this.threeService.createRenderer(document.body, width, height);
+    this.renderer = this.threeService.createRenderer(
+      document.querySelector('app-root')!,
+      width,
+      height
+    );
 
     const gridHelper = new THREE.GridHelper(200, 500);
     this.scene.add(gridHelper);
@@ -45,12 +51,15 @@ export class App implements OnInit {
     this.renderer.setAnimationLoop(this.animate);
   }
 
-  private animate = (time: number) => {
-    this.controls.update();
+  ngOnDestroy(): void {
+    this.threeService.dispose();
+  }
 
-    if (this.updatableChildren) {
-      this.updatableChildren.forEach((child) => child.update(this.clock.getDelta()));
-    }
+  private animate = () => {
+    const delta = this.clock.getDelta();
+
+    this.controls.update();
+    this.tickService.tick(delta);
 
     this.renderer.render(this.scene, this.camera);
   };

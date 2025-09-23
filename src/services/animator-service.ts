@@ -5,17 +5,15 @@ import * as THREE from 'three';
 
 export const MESH_TOKEN = new InjectionToken<THREE.Object3D | THREE.AnimationObjectGroup>('Mesh');
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class AnimatorService implements Tickable {
   protected animationActions: Map<string, THREE.AnimationAction> = new Map();
-  private mixer: THREE.AnimationMixer;
+  private mixer!: THREE.AnimationMixer;
   private loader: EntityLoader;
-
+  
   constructor(@Inject(MESH_TOKEN) private mesh: THREE.Object3D | THREE.AnimationObjectGroup) {
-    this.mixer = new THREE.AnimationMixer(mesh);
     this.loader = new EntityLoader();
+    this.mixer = new THREE.AnimationMixer(mesh);
   }
 
   public setMap(paths: Map<string, string>) {

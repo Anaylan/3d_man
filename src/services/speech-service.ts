@@ -1,8 +1,7 @@
-import { Injectable, signal } from '@angular/core';
-import { EmotionService } from './emotion-service';
+import { OpenaiTtsService, VoiceOption } from '@/app/openai-tts';
+import { inject, Injectable, signal } from '@angular/core';
 
-
-export interface SpeechOptions {
+export interface SpeechSynthesisOptions {
   text: string;
   voice?: string;
   rate?: number;
@@ -10,133 +9,91 @@ export interface SpeechOptions {
   volume?: number;
 }
 
-export interface VoiceOption {
-  name: string;
-  lang: string;
-}
-
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'any' })
 export class SpeechService {
   isSpeaking = signal(false);
   voices = signal<VoiceOption[]>([]);
+  audioElement = signal<HTMLAudioElement | null>(null);
+  openaiTtsService: OpenaiTtsService = inject(OpenaiTtsService);
 
-  private speechSynthesis: SpeechSynthesis;
-  private currentUtterance: SpeechSynthesisUtterance | null = null;
-  private mouthAnimationId: number | null = null;
-
-  constructor(
-    private emotionService: EmotionService,
-  ) {
-    this.speechSynthesis = window.speechSynthesis;
-  }
+  constructor() {}
 
   initialize() {
     this.loadVoices();
-
-    if (this.speechSynthesis.onvoiceschanged !== undefined) {
-      this.speechSynthesis.onvoiceschanged = () => this.loadVoices();
-    }
   }
 
-  speak(options: SpeechOptions) {
-    if (this.isSpeaking()) {
-      this.stop();
-    }
+  async speak(options: SpeechSynthesisOptions) {
+    this.isSpeaking.set(true);
 
-    const utterance = new SpeechSynthesisUtterance(options.text);
+    const audio = new Audio();
 
-    // Настройка голоса
-    if (options.voice) {
-      const voice = this.speechSynthesis.getVoices().find(v => v.name === options.voice);
-      if (voice) {
-        utterance.voice = voice;
-      }
-    }
+    this.openaiTtsService
+      .generateSpeech(options.text, {
+        voice: options.voice!,
+        speed: options.rate!,
+      })
+      .subscribe({
+        next: (buffer: Buffer<ArrayBuffer>) => {
+          const blob = new Blob([buffer], { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          audio.src = url;
+        },
+        error: (error) => {
+          console.error('Error generating speech:', error);
+          audio.src = '/ElevenLabs_Emma_consonants.mp3';
+        },
+      });
 
-    utterance.rate = options.rate || 1;
-    utterance.pitch = options.pitch || 1;
-    utterance.volume = options.volume || 1;
+    this.audioElement.set(audio);
 
-    utterance.onstart = () => {
-      this.isSpeaking.set(true);
-      this.startMouthAnimation();
-    };
-
-    utterance.onend = () => {
+    audio.onended = () => {
       this.isSpeaking.set(false);
-      this.stopMouthAnimation();
+      this.cleanupAudio();
     };
 
-    utterance.onerror = () => {
+    audio.onerror = (error) => {
+      console.error('Audio playback error:', error);
       this.isSpeaking.set(false);
-      this.stopMouthAnimation();
+      this.cleanupAudio();
     };
 
-    this.currentUtterance = utterance;
-    this.speechSynthesis.speak(utterance);
+    await audio.play();
   }
 
   stop() {
-    if (this.speechSynthesis.speaking) {
-      this.speechSynthesis.cancel();
-    }
+    this.audioElement.update((_value) => {
+      if (_value) {
+        _value.pause();
+        _value.currentTime = 0;
+      }
+      return _value;
+    });
 
     this.isSpeaking.set(false);
-    this.stopMouthAnimation();
+    this.cleanupAudio();
   }
 
-  private loadVoices() {
-    const voiceList = this.speechSynthesis.getVoices();
-    const voices = voiceList.map(voice => ({
-      name: voice.name,
-      lang: voice.lang
-    }));
-
-    this.voices.set(voices);
+  private loadVoices(): void {
+    this.voices.set(this.openaiTtsService.getVoices());
   }
 
-  private startMouthAnimation() {
-    // const character = this.threeService.getCharacter();
-    // if (!character) return;
-
-    const mouth = null;
-    if (!mouth) return;
-
-    const animate = () => {
-      if (!this.isSpeaking()) return;
-
-      const time = Date.now() * 0.01;
-      const scale = 0.3 + Math.abs(Math.sin(time)) * 0.4;
-      // mouth.scale.y = scale;
-
-      this.mouthAnimationId = requestAnimationFrame(animate);
-    };
-
-    animate();
+  public getAudioElement(): HTMLAudioElement | null {
+    return this.audioElement();
   }
 
-  private stopMouthAnimation() {
-    if (this.mouthAnimationId) {
-      cancelAnimationFrame(this.mouthAnimationId);
-      this.mouthAnimationId = null;
-    }
+  private cleanupAudio() {
+    this.audioElement.update((_value) => {
+      if (_value) {
+        _value.srcObject = null;
+        _value = null;
+      }
+      return _value;
+    });
 
-    // const character = this.threeService.getCharacter();
-    // if (!character) return;
-
-    const mouth = null;
-    if (!mouth) return;
-
-    // Возврат рта к нормальному состоянию
-    const emotionConfig = this.emotionService.getEmotionConfig(
-      this.emotionService.currentEmotion()
-    );
-    // mouth.scale.copy(emotionConfig.mouthScale);
+    this.audioElement.set(null);
   }
 
-  dispose() {
+  public dispose() {
     this.stop();
   }
 }

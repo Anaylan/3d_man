@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Tickable } from '@/app/tickable';
+import { Tickable } from '@/interfaces/tickable';
 
 @Injectable({ providedIn: 'root' })
 export class TickService {

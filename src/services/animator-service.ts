@@ -1,4 +1,4 @@
-import { Tickable } from '@/app/tickable';
+import { Tickable } from '@/interfaces/tickable';
 import { EntityLoader } from '@/loaders/entity-loader';
 import { Inject, Injectable, InjectionToken } from '@angular/core';
 import * as THREE from 'three';
@@ -10,7 +10,10 @@ export class AnimatorService implements Tickable {
   protected animationActions: Map<string, THREE.AnimationAction> = new Map();
   private mixer!: THREE.AnimationMixer;
   private loader: EntityLoader;
-  
+
+  private currentAnimation!: THREE.AnimationAction;
+  private lastAnimation!: THREE.AnimationAction;
+
   constructor(@Inject(MESH_TOKEN) private mesh: THREE.Object3D | THREE.AnimationObjectGroup) {
     this.loader = new EntityLoader();
     this.mixer = new THREE.AnimationMixer(mesh);
@@ -33,14 +36,23 @@ export class AnimatorService implements Tickable {
     return animationAction;
   }
 
-  public playAnimation(key: string) {
+  public playAnimation(key: string): void {
     const animation = this.animationActions.get(key);
+
     if (animation) {
-      animation.play();
+      if (this.currentAnimation) {
+        this.lastAnimation = this.currentAnimation;
+        this.lastAnimation.fadeOut(1);
+      }
+
+      this.currentAnimation = animation;
+      this.currentAnimation.reset();
+      this.currentAnimation.fadeIn(1);
+      this.currentAnimation.play();
     }
   }
 
-  public update(deltaTime: number) {
+  public update(deltaTime: number): void {
     this.mixer.update(deltaTime);
   }
 }

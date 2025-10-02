@@ -68,7 +68,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     effect(() => {
       const list = this.speechService.voices();
       if (list && list.length && !this.selectedVoice()) {
-        this.selectedVoice.set(list[0].name);
+        this.selectedVoice.set(list[0].voiceId);
       }
     });
   }

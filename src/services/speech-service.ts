@@ -33,7 +33,7 @@ export class SpeechService {
         speed: options.rate!,
       })
       .subscribe({
-        next: (buffer: Buffer<ArrayBuffer>) => {
+        next: (buffer: ArrayBuffer) => {
           const blob = new Blob([buffer], { type: 'audio/mpeg' });
           const url = URL.createObjectURL(blob);
           audio.src = url;

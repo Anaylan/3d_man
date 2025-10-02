@@ -39,7 +39,7 @@ export class OpenaiTtsService {
     this.openai = new OpenAI({ apiKey: this.apiKey, dangerouslyAllowBrowser: true, maxRetries: 0 });
   }
 
-  generateSpeech(text: string, options?: SpeechOptions): Observable<Buffer<ArrayBuffer>> {
+  generateSpeech(text: string, options?: SpeechOptions): Observable<ArrayBuffer> {
     return from(
       (async () => {
         const response = await this.openai.audio.speech.create({
@@ -48,8 +48,7 @@ export class OpenaiTtsService {
           voice: options?.voice || 'alloy',
           speed: options?.speed || 1,
         });
-        const arrayBuffer = await response.arrayBuffer();
-        return Buffer.from(arrayBuffer);
+        return await response.arrayBuffer();
       })()
     );
   }

@@ -33,7 +33,6 @@ export class App implements OnInit, OnDestroy {
 
     this.scene = this.threeService.createScene();
     this.camera = this.threeService.createCamera(width, height, 70, 0.1, 1000);
-    this.threeService.createLights();
     this.renderer = this.threeService.createRenderer(
       document.querySelector('app-root')!,
       width,
@@ -43,6 +42,8 @@ export class App implements OnInit, OnDestroy {
     const gridHelper = new THREE.GridHelper(200, 500);
     this.scene.add(gridHelper);
     this.scene.add(new THREE.AxesHelper());
+    
+    this.threeService.createLights();
   }
 
   ngOnInit(): void {

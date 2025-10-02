@@ -11,7 +11,7 @@ export class ThreeService {
 
   public createScene(): THREE.Scene {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb);
+    this.scene.background = new THREE.Color(0xa0a0a0);
 
     return this.scene;
   }
@@ -36,20 +36,17 @@ export class ThreeService {
   ): THREE.WebGLRenderer {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(width, height);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     return this.renderer;
   }
 
   public createLights(): void {
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 8);
     this.scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(5, 5, 5);
-    directionalLight.castShadow = true;
     this.scene.add(directionalLight);
   }
 

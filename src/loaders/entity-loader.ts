@@ -8,13 +8,17 @@ type TextureSet = {
   orm?: THREE.Texture; // R=AO, G=Roughness, B=Metalness
 };
 
-// TODO: maybe i should add a custom loader type to the parameters
 export class EntityLoader {
+  private loader: THREE.Loader;
+
+  constructor(private LoaderType: new () => THREE.Loader) {
+    this.loader = new LoaderType();
+  }
+
   private loadedObject: THREE.Group<THREE.Object3DEventMap>[] = new Array();
 
-  public async loadObjectAsync(path: string, textures?: TextureSet): Promise<THREE.Object3D> {
-    const fbxLoader = new FBXLoader();
-    const object = await fbxLoader.loadAsync(path);
+  public async loadObjectAsync(path: string, textures?: TextureSet): Promise<any> {
+    const object = await (this.loader as any).loadAsync(path);
 
     if (textures) {
       this.applyTexturesToObject(object, textures);
@@ -29,8 +33,7 @@ export class EntityLoader {
     onLoad: (data: THREE.Group<THREE.Object3DEventMap>) => void,
     textures?: TextureSet
   ): THREE.Object3D {
-    const fbxLoader = new FBXLoader();
-    fbxLoader.load(path, (object) => {
+    this.loader.load(path, (object: any) => {
       onLoad(object);
 
       if (textures) {

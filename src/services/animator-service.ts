@@ -2,27 +2,26 @@ import { Tickable } from '@/interfaces/tickable';
 import { EntityLoader } from '@/loaders/entity-loader';
 import { Inject, Injectable, InjectionToken } from '@angular/core';
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
 export const MESH_TOKEN = new InjectionToken<THREE.Object3D | THREE.AnimationObjectGroup>('Mesh');
 
 @Injectable()
 export class AnimatorService implements Tickable {
-  protected animationActions: Map<string, THREE.AnimationAction> = new Map();
-  private mixer!: THREE.AnimationMixer;
-  private loader: EntityLoader;
-
-  private currentAnimation!: THREE.AnimationAction;
-  private lastAnimation!: THREE.AnimationAction;
+  private actions = new Map<string, THREE.AnimationAction>();
+  private mixer: THREE.AnimationMixer;
+  private loader = new EntityLoader(FBXLoader);
+  private currentAction?: THREE.AnimationAction;
 
   constructor(@Inject(MESH_TOKEN) private mesh: THREE.Object3D | THREE.AnimationObjectGroup) {
-    this.loader = new EntityLoader();
+    this.loader = new EntityLoader(FBXLoader);
     this.mixer = new THREE.AnimationMixer(mesh);
   }
 
   public setMap(paths: Map<string, string>) {
-    for (const [key, value] of paths) {
-      if (value.trim().length > 1) {
-        this.loader.loadObject(value, (object) => {
+    for (const [key, path] of paths) {
+      if (path.trim()) {
+        this.loader.loadObject(path, (object) => {
           this.setPair(key, object.animations[0]);
         });
       }
@@ -30,29 +29,30 @@ export class AnimatorService implements Tickable {
   }
 
   public setPair(key: string, animation: THREE.AnimationClip): THREE.AnimationAction {
-    const animationAction = this.mixer.clipAction(animation);
-    this.animationActions.set(key, animationAction);
-
-    return animationAction;
+    const action = this.mixer.clipAction(animation);
+    this.actions.set(key, action);
+    return action;
   }
 
   public playAnimation(key: string): void {
-    const animation = this.animationActions.get(key);
+    const action = this.actions.get(key);
+    if (!action) return;
 
-    if (animation) {
-      if (this.currentAnimation) {
-        this.lastAnimation = this.currentAnimation;
-        this.lastAnimation.fadeOut(1);
+    if (action) {
+      if (this.currentAction && this.currentAction !== action) {
+        this.currentAction.fadeOut(1);
       }
 
-      this.currentAnimation = animation;
-      this.currentAnimation.reset();
-      this.currentAnimation.fadeIn(1);
-      this.currentAnimation.play();
+      this.currentAction = action;
+      this.currentAction.reset().fadeIn(1).play();
     }
   }
 
   public update(deltaTime: number): void {
     this.mixer.update(deltaTime);
+  }
+
+  public isReady(): boolean {
+    return this.actions.size > 0;
   }
 }

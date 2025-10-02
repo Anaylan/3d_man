@@ -4,12 +4,14 @@ import { TickService } from '@/services/tick-service';
 import { EmotionService } from '@/services/emotion-service';
 import { SpeechService } from '@/services/speech-service';
 import { ThreeService } from '@/services/three-service';
-import { OpenaiTtsService, VoiceOption } from '../openai-tts';
-import { Component, OnInit, OnDestroy, signal, computed, EffectRef, effect } from '@angular/core';
+import { OpenaiTtsService } from '../openai-tts';
+import { Component, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
 import { Tickable } from '../../interfaces/tickable';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Lipsync } from 'wawa-lipsync';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /**
  * Character component hosting the 3D model and wiring services.
@@ -22,10 +24,39 @@ import { Lipsync } from 'wawa-lipsync';
   styleUrl: './character.scss',
 })
 export class Character implements OnInit, OnDestroy, Tickable {
-  private loader: EntityLoader;
   private animatorService!: AnimatorService;
-  private voicesEffect?: EffectRef;
-  private lipsync: Lipsync;
+  private lipsync: Lipsync = new Lipsync();
+  private model!: THREE.Object3D<THREE.Object3DEventMap>;
+
+  private readonly visemeMap: Record<string, Array<{ morph: string; value: number }>> = {
+    sil: [],
+    PP: [],
+    FF: [{ morph: 'mouthOpen', value: 0.2 }],
+    TH: [{ morph: 'mouthOpen', value: 0.3 }],
+    DD: [{ morph: 'mouthOpen', value: 0.4 }],
+    kk: [{ morph: 'mouthOpen', value: 0.5 }],
+    CH: [
+      { morph: 'mouthOpen', value: 0.4 },
+      { morph: 'mouthSmile', value: 0.3 },
+    ],
+    SS: [
+      { morph: 'mouthSmile', value: 0.5 },
+      { morph: 'mouthOpen', value: 0.2 },
+    ],
+    nn: [{ morph: 'mouthOpen', value: 0.3 }],
+    RR: [{ morph: 'mouthOpen', value: 0.4 }],
+    aa: [{ morph: 'mouthOpen', value: 0.8 }],
+    E: [
+      { morph: 'mouthSmile', value: 0.6 },
+      { morph: 'mouthOpen', value: 0.4 },
+    ],
+    I: [
+      { morph: 'mouthSmile', value: 0.7 },
+      { morph: 'mouthOpen', value: 0.2 },
+    ],
+    O: [{ morph: 'mouthOpen', value: 0.9 }],
+    U: [{ morph: 'mouthOpen', value: 0.7 }],
+  };
 
   constructor(
     public threeService: ThreeService,
@@ -34,15 +65,12 @@ export class Character implements OnInit, OnDestroy, Tickable {
     public openaiTtsService: OpenaiTtsService,
     private tickService: TickService
   ) {
-    this.loader = new EntityLoader();
-    this.voicesEffect = effect(() => {
+    effect(() => {
       const list = this.speechService.voices();
       if (list && list.length && !this.selectedVoice()) {
         this.selectedVoice.set(list[0].name);
       }
     });
-
-    this.lipsync = new Lipsync();
   }
 
   speechText = signal('Hey! How are you doing?');
@@ -52,51 +80,48 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
-    return `${this.getEmotionLabel(emotion)}`;
+    const emotionData = this.emotions.find((e) => e.value === emotion);
+    return emotionData?.label || emotion;
   });
 
   emotions = [
-    { value: 'neutral', label: 'Neutral', path: '/animations/Anim_Idle_7.FBX' },
-    { value: 'happy', label: 'Happy', path: '/animations/Anim_Clap_3.FBX' },
-    { value: 'sad', label: 'Sad', path: '/animations/Anim_Wave_4.FBX' }
+    { value: 'neutral', label: 'Neutral', path: '/animations/Idle.fbx' },
+    { value: 'happy', label: 'Happy', path: '/animations/Happy.fbx' },
+    { value: 'sad', label: 'Sad', path: '/animations/Rejected.fbx' },
   ];
 
   /**
    * Loads the character model, registers animator, and sets animation map.
    */
-  async spawn() {
-    const scene = this.threeService.getScene();
-    const model = await this.loader.loadObjectAsync('/models/SKM_Woman.FBX');
-    model.scale.setScalar(0.01);
-    model.rotateX(-Math.PI / 2);
-    scene.add(model);
+  private async spawn() {
+    const loader = new EntityLoader(GLTFLoader);
+    const { scene: model } = await loader.loadObjectAsync('/models/Avatar.glb');
+    // model.scale.setScalar(0.01);
+    // model.rotateX(-Math.PI / 2);
 
-    const animMap = new Map<string, string>();
+    this.model = model;
+    this.threeService.getScene().add(this.model);
 
-    for (const { value, path } of this.emotions) {
-      animMap.set(value, path);
-    }
+    const animMap = new Map(this.emotions.map(({ value, path }) => [value, path]));
 
-    this.animatorService = new AnimatorService(model);
+    this.animatorService = new AnimatorService(this.model);
     this.animatorService.setMap(animMap);
 
     // Register animator via Tickable interface
     this.tickService.registerTickable(this.animatorService);
   }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.speechService.initialize();
-
-    this.spawn();
-    this.setEmotion('neutral');
-
     // Subscribe Character to global tick stream via Tickable
     this.tickService.registerTickable(this);
+
+    await this.spawn();
+    await this.setEmotion('neutral');
   }
 
   ngOnDestroy(): void {
     this.speechService.dispose();
-    this.voicesEffect?.destroy();
     this.tickService.unregisterTickable(this);
 
     if (this.animatorService) {
@@ -130,14 +155,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   }
 
   /**
-   * Returns a human-readable label for an emotion value.
-   */
-  private getEmotionLabel(emotion: string): string {
-    const emotionData = this.emotions.find((e) => e.value === emotion);
-    return emotionData?.label || emotion;
-  }
-
-  /**
    * Handler for emotion selection changes.
    */
   onEmotionChange() {
@@ -147,11 +164,16 @@ export class Character implements OnInit, OnDestroy, Tickable {
   /**
    * Applies selected emotion and plays corresponding animation.
    */
-  setEmotion(emotion: string) {
+  async setEmotion(emotion: string) {
     this.selectedEmotion.set(emotion);
     this.emotionService.setEmotion(emotion);
-    if (this.animatorService) {
-      this.animatorService.playAnimation(emotion);
+
+    for (let i = 0; i < 100; i++) {
+      if (this.animatorService?.isReady()) {
+        this.animatorService.playAnimation(emotion);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 
@@ -159,5 +181,36 @@ export class Character implements OnInit, OnDestroy, Tickable {
   update(deltaTime: number) {
     this.lipsync.processAudio();
     const viseme = this.lipsync.viseme;
+
+    if (viseme && this.model) {
+      const cleanViseme = viseme.replace('viseme_', '');
+      this.applyViseme(cleanViseme);
+    }
+  }
+
+  private applyViseme(viseme: string) {
+    const targets = this.visemeMap[viseme] || [];
+    const applied = new Set(targets.map((t) => t.morph));
+
+    targets.forEach(({ morph, value }) => this.lerpMorphTarget(morph, value, 0.4));
+
+    // we have only 2 morphs
+    ['mouthOpen', 'mouthSmile'].forEach((morph) => {
+      if (!applied.has(morph)) this.lerpMorphTarget(morph, 0, 0.2);
+    });
+  }
+
+  private lerpMorphTarget(target: string, value: number, speed = 0.1) {
+    this.model?.traverse((child) => {
+      if (child instanceof THREE.SkinnedMesh) {
+        const dict = child.morphTargetDictionary;
+        const influences = child.morphTargetInfluences;
+        const index = dict?.[target];
+
+        if (index !== undefined && influences?.[index] !== undefined) {
+          influences[index] = THREE.MathUtils.lerp(influences[index], value, speed);
+        }
+      }
+    });
   }
 }

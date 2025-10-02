@@ -28,36 +28,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
 
-  private readonly visemeMap: Record<string, Array<{ morph: string; value: number }>> = {
-    sil: [],
-    PP: [],
-    FF: [{ morph: 'mouthOpen', value: 0.2 }],
-    TH: [{ morph: 'mouthOpen', value: 0.3 }],
-    DD: [{ morph: 'mouthOpen', value: 0.4 }],
-    kk: [{ morph: 'mouthOpen', value: 0.5 }],
-    CH: [
-      { morph: 'mouthOpen', value: 0.4 },
-      { morph: 'mouthSmile', value: 0.3 },
-    ],
-    SS: [
-      { morph: 'mouthSmile', value: 0.5 },
-      { morph: 'mouthOpen', value: 0.2 },
-    ],
-    nn: [{ morph: 'mouthOpen', value: 0.3 }],
-    RR: [{ morph: 'mouthOpen', value: 0.4 }],
-    aa: [{ morph: 'mouthOpen', value: 0.8 }],
-    E: [
-      { morph: 'mouthSmile', value: 0.6 },
-      { morph: 'mouthOpen', value: 0.4 },
-    ],
-    I: [
-      { morph: 'mouthSmile', value: 0.7 },
-      { morph: 'mouthOpen', value: 0.2 },
-    ],
-    O: [{ morph: 'mouthOpen', value: 0.9 }],
-    U: [{ morph: 'mouthOpen', value: 0.7 }],
-  };
-
   constructor(
     public threeService: ThreeService,
     public emotionService: EmotionService,
@@ -180,24 +150,45 @@ export class Character implements OnInit, OnDestroy, Tickable {
   /** Tickable.update implementation */
   update(deltaTime: number) {
     this.lipsync.processAudio();
-    const viseme = this.lipsync.viseme;
 
-    if (viseme && this.model) {
-      const cleanViseme = viseme.replace('viseme_', '');
-      this.applyViseme(cleanViseme);
+    if (this.model && this.lipsync.features) {
+      this.applyViseme();
     }
   }
 
-  private applyViseme(viseme: string) {
-    const targets = this.visemeMap[viseme] || [];
-    const applied = new Set(targets.map((t) => t.morph));
+  private applyViseme() {
+    const current = this.lipsync.features;
+    if (!current) return;
 
-    targets.forEach(({ morph, value }) => this.lerpMorphTarget(morph, value, 0.4));
+    const avg = this.lipsync.getAveragedFeatures();
+    const s = this.lipsync.computeVisemeScores(
+      current,
+      avg,
+      current.volume - avg.volume,
+      current.centroid - avg.centroid
+    );
 
-    // we have only 2 morphs
-    ['mouthOpen', 'mouthSmile'].forEach((morph) => {
-      if (!applied.has(morph)) this.lerpMorphTarget(morph, 0, 0.2);
-    });
+    const open = Math.max(
+      s.viseme_aa,
+      s.viseme_O,
+      s.viseme_U,
+      s.viseme_kk,
+      s.viseme_DD,
+      s.viseme_RR,
+      s.viseme_nn,
+      s.viseme_TH,
+      s.viseme_FF
+    );
+
+    const smile = Math.max(
+      s.viseme_I * 0.7,
+      s.viseme_E * 0.6,
+      s.viseme_SS * 0.5,
+      s.viseme_CH * 0.3
+    );
+
+    this.lerpMorphTarget('mouthOpen', open, 0.4);
+    this.lerpMorphTarget('mouthSmile', smile, 0.4);
   }
 
   private lerpMorphTarget(target: string, value: number, speed = 0.1) {

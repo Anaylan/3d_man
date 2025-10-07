@@ -168,23 +168,25 @@ export class Character implements OnInit, OnDestroy, Tickable {
       current.centroid - avg.centroid
     );
 
+    const adjusted = this.lipsync.adjustScoresForConsistency(s);
+
     const open = Math.max(
-      s.viseme_aa,
-      s.viseme_O,
-      s.viseme_U,
-      s.viseme_kk,
-      s.viseme_DD,
-      s.viseme_RR,
-      s.viseme_nn,
-      s.viseme_TH,
-      s.viseme_FF
+      adjusted.viseme_aa,
+      adjusted.viseme_O,
+      adjusted.viseme_U,
+      adjusted.viseme_kk,
+      adjusted.viseme_DD,
+      adjusted.viseme_RR,
+      adjusted.viseme_nn,
+      adjusted.viseme_TH,
+      adjusted.viseme_FF
     );
 
     const smile = Math.max(
-      s.viseme_I * 0.7,
-      s.viseme_E * 0.6,
-      s.viseme_SS * 0.5,
-      s.viseme_CH * 0.3
+      adjusted.viseme_I * 0.7,
+      adjusted.viseme_E * 0.6,
+      adjusted.viseme_SS * 0.5,
+      adjusted.viseme_CH * 0.3
     );
 
     this.lerpMorphTarget('mouthOpen', open, 0.4);

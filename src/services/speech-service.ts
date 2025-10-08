@@ -1,11 +1,11 @@
 import { OpenaiTtsService, VoiceOption } from '@/app/openai-tts';
 import { inject, Injectable, signal } from '@angular/core';
+import { CacheService } from './cache-service';
 
 export interface SpeechSynthesisOptions {
   text: string;
   voice?: string;
   rate?: number;
-  pitch?: number;
   volume?: number;
 }
 
@@ -16,9 +16,7 @@ export class SpeechService {
   audioElement = signal<HTMLAudioElement | null>(null);
   openaiTtsService: OpenaiTtsService = inject(OpenaiTtsService);
 
-  constructor() {}
-
-  initialize() {
+  constructor(private cacheService: CacheService) {
     this.loadVoices();
   }
 
@@ -27,24 +25,15 @@ export class SpeechService {
 
     const audio = new Audio();
 
-    this.openaiTtsService
-      .generateSpeech(options.text, {
-        voice: options.voice!,
-        speed: options.rate!,
-      })
-      .subscribe({
-        next: (buffer: ArrayBuffer) => {
-          const blob = new Blob([buffer], { type: 'audio/mpeg' });
-          const url = URL.createObjectURL(blob);
-          audio.src = url;
-        },
-        error: (error) => {
-          console.error('Error generating speech:', error);
-          audio.src = '/ElevenLabs_Emma_consonants.mp3';
-        },
-      });
+    const key = this.buildCacheKey(options);
+    const blob = await this.getOrGenerateAudio(key, options);
+    const url = URL.createObjectURL(blob);
 
+    audio.src = url;
     this.audioElement.set(audio);
+    audio.playbackRate = options.rate ?? 1.0;
+    audio.volume = options.volume ?? 1.0;
+    audio.preservesPitch = false;
 
     audio.onended = () => {
       this.isSpeaking.set(false);
@@ -58,6 +47,40 @@ export class SpeechService {
     };
 
     await audio.play();
+  }
+
+  private buildCacheKey(options: SpeechSynthesisOptions): string {
+    return `${options.voice || 'default'}: ${options.text}`;
+  }
+
+  private async getOrGenerateAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
+    const cachedBlob = (await this.cacheService.get(key)) as Blob;
+
+    if (cachedBlob) {
+      return cachedBlob;
+    }
+
+    return await this.generateAndCacheAudio(key, options);
+  }
+
+  private generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      this.openaiTtsService
+        .generateSpeech(options.text, {
+          voice: options.voice!,
+        })
+        .subscribe({
+          next: async (buffer: ArrayBuffer) => {
+            const blob = new Blob([buffer], { type: 'audio/mpeg' });
+            await this.cacheService.set(key, blob);
+            resolve(blob);
+          },
+          error: (error) => {
+            console.error('Error generating speech:', error);
+            reject(error);
+          },
+        });
+    });
   }
 
   stop() {

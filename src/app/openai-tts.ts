@@ -25,7 +25,6 @@ export interface VoiceOption {
 export interface SpeechOptions {
   voice?: VoiceType;
   model?: string;
-  speed?: number;
 }
 
 @Injectable({
@@ -46,7 +45,6 @@ export class OpenaiTtsService {
           input: text,
           model: options?.model || 'tts-1',
           voice: options?.voice || 'alloy',
-          speed: options?.speed || 1,
         });
         return await response.arrayBuffer();
       })()

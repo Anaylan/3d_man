@@ -65,9 +65,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
    */
   private async spawn() {
     const loader = new EntityLoader(GLTFLoader);
-    const { scene: model } = await loader.loadObjectAsync('/models/Avatar.glb');
-    // model.scale.setScalar(0.01);
-    // model.rotateX(-Math.PI / 2);
+    const { scene: model } = await loader.loadObjectAsync('/models/Avatar V2.glb');
 
     this.model = model;
     this.threeService.getScene().add(this.model);
@@ -82,7 +80,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   }
 
   async ngOnInit(): Promise<void> {
-    this.speechService.initialize();
     // Subscribe Character to global tick stream via Tickable
     this.tickService.registerTickable(this);
 
@@ -161,36 +158,36 @@ export class Character implements OnInit, OnDestroy, Tickable {
     if (!current) return;
 
     const avg = this.lipsync.getAveragedFeatures();
-    const s = this.lipsync.computeVisemeScores(
-      current,
-      avg,
-      current.volume - avg.volume,
-      current.centroid - avg.centroid
-    );
+    const volumeDiff = current.volume - avg.volume;
+    const centroidDiff = current.centroid - avg.centroid;
 
-    const adjusted = this.lipsync.adjustScoresForConsistency(s);
+    const scores = this.lipsync.computeVisemeScores(current, avg, volumeDiff, centroidDiff);
+    const adjusted = this.lipsync.adjustScoresForConsistency(scores);
 
-    const open = Math.max(
-      adjusted.viseme_aa,
-      adjusted.viseme_O,
-      adjusted.viseme_U,
-      adjusted.viseme_kk,
-      adjusted.viseme_DD,
-      adjusted.viseme_RR,
-      adjusted.viseme_nn,
-      adjusted.viseme_TH,
-      adjusted.viseme_FF
-    );
+    let maxViseme = 'viseme_sil';
+    let maxValue = 0;
 
-    const smile = Math.max(
-      adjusted.viseme_I * 0.7,
-      adjusted.viseme_E * 0.6,
-      adjusted.viseme_SS * 0.5,
-      adjusted.viseme_CH * 0.3
-    );
+    Object.entries(adjusted).forEach(([key, value]) => {
+      if (value > maxValue) {
+        maxValue = value;
+        maxViseme = key;
+      }
+    });
 
-    this.lerpMorphTarget('mouthOpen', open, 0.4);
-    this.lerpMorphTarget('mouthSmile', smile, 0.4);
+    const isVowel =
+      maxViseme === 'viseme_aa' ||
+      maxViseme === 'viseme_E' ||
+      maxViseme === 'viseme_I' ||
+      maxViseme === 'viseme_O' ||
+      maxViseme === 'viseme_U';
+
+    this.lerpMorphTarget(maxViseme, 1, isVowel ? 0.2 : 0.6);
+
+    Object.keys(adjusted).forEach((viseme) => {
+      if (viseme !== maxViseme) {
+        this.lerpMorphTarget(viseme, 0, isVowel ? 0.1 : 0.5);
+      }
+    });
   }
 
   private lerpMorphTarget(target: string, value: number, speed = 0.1) {

@@ -43,7 +43,7 @@ export class CacheService {
    * @param data - The data to store.
    * @throws If the key already exists.
    */
-  async set<T>(key: string, data: T): Promise<void> {
+  public async set<T>(key: string, data: T): Promise<void> {
     // We check if data already exists for this key.
     if (this.cache.has(key)) {
       // If it already exists, we throw an exception to prevent overwriting the data.
@@ -65,15 +65,15 @@ export class CacheService {
    * @param key - The key of the cached value.
    * @returns The cached value or undefined if not found.
    */
-  async get(key: string): Promise<unknown> {
+  public async get(key: string): Promise<unknown> {
     if (this.cache.has(key)) {
-      const data = this.cache.get(key) as unknown;
+      const data = this.cache.get(key);
       this.cache$.next(data);
       return data;
     }
 
     const db = await this.dbPromise;
-    const data = (await db.get('cache', key)) as unknown;
+    const data = await db.get('cache', key);
 
     if (data !== undefined) {
       this.cache.set(key, data);
@@ -87,7 +87,7 @@ export class CacheService {
    * Removes a single key from the cache.
    * @param key - The key to remove.
    */
-  async clear(key: string): Promise<void> {
+  public async clear(key: string): Promise<void> {
     const db = await this.dbPromise;
     await db.delete('cache', key);
 
@@ -99,7 +99,7 @@ export class CacheService {
   /**
    * Clears the entire cache and removes all stored data from localStorage.
    */
-  async clearAll(): Promise<void> {
+  public async clearAll(): Promise<void> {
     const db = await this.dbPromise;
     await db.clear('cache');
 
@@ -114,8 +114,8 @@ export class CacheService {
     const db = await this.dbPromise;
     const allKeys = await db.getAllKeys('cache');
     for (const key of allKeys) {
-      const value = await db.get('cache', key as string);
-      this.cache.set(key as string, value);
+      const value = await db.get('cache', key);
+      this.cache.set(key, value);
     }
   }
 }

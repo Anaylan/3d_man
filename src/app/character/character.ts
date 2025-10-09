@@ -27,6 +27,17 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
+  public readonly audio: Map<string, string> = new Map([
+    ['Hey there! How are you today?', '/audio/1.mp3'],
+    ['Hi! Great to see you again.', '/audio/2.mp3'],
+    ["What's up? How can I help?", '/audio/3.mp3'],
+    ["My name's Jennifer - I'm your friendly AI assistant.", '/audio/4.mp3'],
+    ["Whoa! That's awesome!", '/audio/5.mp3'],
+    ['Bravo! Well done!', '/audio/6.mp3'],
+    ['Ta-daaa!', '/audio/7.mp3'],
+    ["Okay, I'm on it.", '/audio/8.mp3'],
+    ["Here's what I found!", '/audio/9.mp3'],
+  ]);
 
   constructor(
     public threeService: ThreeService,
@@ -47,6 +58,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   selectedEmotion = signal('neutral');
   selectedVoice = signal('');
   speechSpeed = signal(1);
+  volume = signal(1);
 
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
@@ -106,6 +118,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
       text: this.speechText(),
       voice: this.selectedVoice(),
       rate: this.speechSpeed(),
+      volume: this.volume(),
     });
 
     const audioEl = this.speechService.getAudioElement();
@@ -202,5 +215,26 @@ export class Character implements OnInit, OnDestroy, Tickable {
         }
       }
     });
+  }
+
+  async onAudioItemClick(item: [string, string]) {
+    const audioEl =
+      this.speechService.audioElement() ??
+      (() => {
+        const newAudio = new Audio();
+        this.speechService.audioElement.set(newAudio);
+        return newAudio;
+      })();
+
+    audioEl.pause();
+    audioEl.currentTime = 0;
+
+    this.speechService.configureAudio(audioEl, item[1], {
+      rate: this.speechSpeed(),
+      volume: this.volume(),
+    });
+
+    this.lipsync.connectAudio(audioEl);
+    await audioEl.play();
   }
 }

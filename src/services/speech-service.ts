@@ -3,7 +3,7 @@ import { inject, Injectable, signal } from '@angular/core';
 import { CacheService } from './cache-service';
 
 export interface SpeechSynthesisOptions {
-  text: string;
+  text?: string;
   voice?: string;
   rate?: number;
   volume?: number;
@@ -25,32 +25,32 @@ export class SpeechService {
 
     const audio = new Audio();
 
-    const key = this.buildCacheKey(options);
+    const key = `${options.voice || 'default'}: ${options.text}`;
     const blob = await this.getOrGenerateAudio(key, options);
     const url = URL.createObjectURL(blob);
 
-    audio.src = url;
+    this.configureAudio(audio, url, options);
     this.audioElement.set(audio);
-    audio.playbackRate = options.rate ?? 1.0;
-    audio.volume = options.volume ?? 1.0;
-    audio.preservesPitch = false;
-
-    audio.onended = () => {
-      this.isSpeaking.set(false);
-      this.cleanupAudio();
-    };
-
-    audio.onerror = (error) => {
-      console.error('Audio playback error:', error);
-      this.isSpeaking.set(false);
-      this.cleanupAudio();
-    };
 
     await audio.play();
   }
 
-  private buildCacheKey(options: SpeechSynthesisOptions): string {
-    return `${options.voice || 'default'}: ${options.text}`;
+  public configureAudio(audioRef: HTMLAudioElement, url: string, options: SpeechSynthesisOptions) {
+    audioRef.src = url;
+    audioRef.playbackRate = options.rate ?? 1.0;
+    audioRef.volume = options.volume ?? 1.0;
+    audioRef.preservesPitch = false;
+
+    audioRef.onended = () => {
+      this.isSpeaking.set(false);
+      this.cleanupAudio();
+    };
+
+    audioRef.onerror = (error) => {
+      console.error('Audio playback error:', error);
+      this.isSpeaking.set(false);
+      this.cleanupAudio();
+    };
   }
 
   private async getOrGenerateAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
@@ -64,9 +64,9 @@ export class SpeechService {
   }
 
   private generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       this.openaiTtsService
-        .generateSpeech(options.text, {
+        .generateSpeech(options.text!, {
           voice: options.voice!,
         })
         .subscribe({
@@ -77,7 +77,7 @@ export class SpeechService {
           },
           error: (error) => {
             console.error('Error generating speech:', error);
-            reject(error);
+            resolve(new Blob([], { type: 'audio/mpeg' }));
           },
         });
     });

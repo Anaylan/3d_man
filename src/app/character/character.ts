@@ -60,6 +60,9 @@ export class Character implements OnInit, OnDestroy, Tickable {
   speechSpeed = signal(1);
   volume = signal(1);
 
+  // debug
+  loopAudio = signal(false);
+
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
     const emotionData = this.emotions.find((e) => e.value === emotion);
@@ -123,6 +126,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
     const audioEl = this.speechService.getAudioElement();
     if (audioEl) {
+      audioEl.loop = this.loopAudio();
       this.lipsync.connectAudio(audioEl);
     }
   }
@@ -228,12 +232,14 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
     audioEl.pause();
     audioEl.currentTime = 0;
+    audioEl.loop = this.loopAudio();
 
     this.speechService.configureAudio(audioEl, item[1], {
       rate: this.speechSpeed(),
       volume: this.volume(),
     });
 
+    this.speechService.isSpeaking.set(true);
     this.lipsync.connectAudio(audioEl);
     await audioEl.play();
   }

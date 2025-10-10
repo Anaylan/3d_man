@@ -1,4 +1,3 @@
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as THREE from 'three';
 
 type TextureSet = {

@@ -16,6 +16,7 @@ import { OpenaiTtsService } from '../openai-tts';
 import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
 import { CharacterConfigService } from './character-config.service';
+import { threshold } from 'three/src/nodes/TSL.js';
 
 /**
  * @class Character
@@ -89,6 +90,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   speechSpeed = signal(1);
   volume = signal(1);
   loopAudio = signal(false);
+  preservesPitch = signal(false);
 
   // --- Computed property to derive status from the config ---
   currentStatus = computed(() => {
@@ -233,6 +235,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
       voice: this.selectedVoice(),
       rate: this.speechSpeed(),
       volume: this.volume(),
+      preservesPitch: this.preservesPitch()
     });
 
     const audioEl = this.speechService.getAudioElement();
@@ -279,6 +282,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.speechService.configureAudio(audioEl, item[1], {
       rate: this.speechSpeed(),
       volume: this.volume(),
+      preservesPitch: this.preservesPitch()
     });
 
     this.speechService.isSpeaking.set(true);

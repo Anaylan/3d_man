@@ -7,6 +7,7 @@ export interface SpeechSynthesisOptions {
   voice?: string;
   rate?: number;
   volume?: number;
+  preservesPitch?: boolean
 }
 
 @Injectable({ providedIn: 'any' })
@@ -39,7 +40,7 @@ export class SpeechService {
     audioRef.src = url;
     audioRef.playbackRate = options.rate ?? 1.0;
     audioRef.volume = options.volume ?? 1.0;
-    audioRef.preservesPitch = false;
+    audioRef.preservesPitch = options.preservesPitch!;
 
     audioRef.onended = () => {
       this.isSpeaking.set(false);

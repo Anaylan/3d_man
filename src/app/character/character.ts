@@ -1,3 +1,11 @@
+import { Component, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { Lipsync, VISEMES } from 'wawa-lipsync';
+
+// --- Services and Interfaces ---
 import { EntityLoader } from '@/loaders/entity-loader';
 import { AnimatorService } from '@/services/animator-service';
 import { TickService } from '@/services/tick-service';
@@ -5,17 +13,15 @@ import { EmotionService } from '@/services/emotion-service';
 import { SpeechService } from '@/services/speech-service';
 import { ThreeService } from '@/services/three-service';
 import { OpenaiTtsService } from '../openai-tts';
-import { Component, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
 import { Tickable } from '../../interfaces/tickable';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { Lipsync } from 'wawa-lipsync';
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CharacterConfig, VisemeConfig } from './character.models';
+import { CharacterConfigService } from './character-config.service';
 
 /**
- * Character component hosting the 3D model and wiring services.
- * @implements Tickable
+ * @class Character
+ * @description A reusable component that hosts a 3D model and wires up all related services.
+ * It is configured dynamically via the CharacterConfigService.
+ * @implements OnInit, OnDestroy, Tickable
  */
 @Component({
   selector: 'app-character',
@@ -27,81 +33,91 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
-  public readonly audio: Map<string, string> = new Map([
+
+  // --- All configuration is now provided externally ---
+  public config!: CharacterConfig;
+
+  readonly AUDIO_CLIPS: Map<string, string> = new Map([
     ['Hey there! How are you today?', '/audio/1.mp3'],
     ['Hi! Great to see you again.', '/audio/2.mp3'],
     ["What's up? How can I help?", '/audio/3.mp3'],
     ["My name's Jennifer - I'm your friendly AI assistant.", '/audio/4.mp3'],
     ["Whoa! That's awesome!", '/audio/5.mp3'],
     ['Bravo! Well done!', '/audio/6.mp3'],
-    ['Ta-daaa!', '/audio/7.mp3'],
-    ["Okay, I'm on it.", '/audio/8.mp3'],
-    ["Here's what I found!", '/audio/9.mp3'],
   ]);
+
+  readonly VISEME_DETAILS: VisemeConfig = {
+    viseme_PP: { type: 'consonant' },
+    viseme_FF: { type: 'consonant' },
+    viseme_TH: { type: 'consonant' },
+    viseme_DD: { type: 'consonant' },
+    viseme_kk: { type: 'consonant' },
+    viseme_CH: { type: 'consonant' },
+    viseme_SS: { type: 'consonant' },
+    viseme_nn: { type: 'consonant' },
+    viseme_RR: { type: 'consonant' },
+    viseme_aa: { type: 'vowel' },
+    viseme_E: { type: 'vowel' },
+    viseme_I: { type: 'vowel' },
+    viseme_O: { type: 'vowel' },
+    viseme_U: { type: 'vowel' },
+    viseme_sil: { type: 'silent' },
+  };
 
   constructor(
     public threeService: ThreeService,
     public emotionService: EmotionService,
     public speechService: SpeechService,
     public openaiTtsService: OpenaiTtsService,
-    private tickService: TickService
+    private tickService: TickService,
+    // --- Configuration is injected here ---
+    private configService: CharacterConfigService
   ) {
+    // Effect to auto-select a voice when available
     effect(() => {
-      const list = this.speechService.voices();
-      if (list && list.length && !this.selectedVoice()) {
-        this.selectedVoice.set(list[0].voiceId);
+      const voiceList = this.speechService.voices();
+      if (voiceList?.length && !this.selectedVoice()) {
+        this.selectedVoice.set(voiceList[0].voiceId);
       }
     });
   }
 
+  // --- Component State Signals ---
   speechText = signal('Hey! How are you doing?');
   selectedEmotion = signal('neutral');
   selectedVoice = signal('');
   speechSpeed = signal(1);
   volume = signal(1);
-
-  // debug
   loopAudio = signal(false);
 
+  // --- Computed property to derive status from the config ---
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
-    const emotionData = this.emotions.find((e) => e.value === emotion);
+    const emotionData = this.config?.emotions.find((e) => e.value === emotion);
     return emotionData?.label || emotion;
   });
 
-  emotions = [
-    { value: 'neutral', label: 'Neutral', path: '/animations/Idle.fbx' },
-    { value: 'happy', label: 'Happy', path: '/animations/Happy.fbx' },
-    { value: 'sad', label: 'Sad', path: '/animations/Rejected.fbx' },
-  ];
-
   /**
-   * Loads the character model, registers animator, and sets animation map.
+   * @method ngOnInit
+   * @description Initializes the component by loading the configuration and spawning the character.
    */
-  private async spawn() {
-    const loader = new EntityLoader(GLTFLoader);
-    const { scene: model } = await loader.loadObjectAsync('/models/Avatar V2.glb');
-
-    this.model = model;
-    this.threeService.getScene().add(this.model);
-
-    const animMap = new Map(this.emotions.map(({ value, path }) => [value, path]));
-
-    this.animatorService = new AnimatorService(this.model);
-    this.animatorService.setMap(animMap);
-
-    // Register animator via Tickable interface
-    this.tickService.registerTickable(this.animatorService);
-  }
-
   async ngOnInit(): Promise<void> {
-    // Subscribe Character to global tick stream via Tickable
     this.tickService.registerTickable(this);
 
+    // --- Load configuration from the service ---
+    this.config = this.configService.getConfig('jennifer');
     await this.spawn();
-    await this.setEmotion('neutral');
+    
+    // --- Set the default emotion from the loaded config ---
+    if (this.config.emotions.length > 0) {
+      await this.setEmotion(this.config.emotions[0].value);
+    }
   }
 
+  /**
+   * @method ngOnDestroy
+   * @description Cleans up services and unregisters from the tick service.
+   */
   ngOnDestroy(): void {
     this.speechService.dispose();
     this.tickService.unregisterTickable(this);
@@ -112,11 +128,106 @@ export class Character implements OnInit, OnDestroy, Tickable {
   }
 
   /**
-   * Triggers speech synthesis using current settings.
+   * @method spawn
+   * @description Loads the 3D model and sets up the animator service based on the provided configuration.
    */
+  private async spawn() {
+    const loader = new EntityLoader(GLTFLoader);
+    const { scene: model } = await loader.loadObjectAsync(this.config.modelPath);
+
+    this.model = model;
+    this.threeService.getScene().add(this.model);
+
+    const animMap = new Map(this.config.emotions.map(({ value, path }) => [value, path]));
+    this.animatorService = new AnimatorService(this.model);
+    this.animatorService.setMap(animMap);
+
+    this.tickService.registerTickable(this.animatorService);
+  }
+
+  /**
+   * @method update
+   * @description Part of the Tickable interface. Called on every frame to update lipsync.
+   * @param {number} deltaTime - Time elapsed since the last frame.
+   */
+  update(deltaTime: number): void {
+    this.lipsync.processAudio();
+    if (this.model && this.lipsync.features) {
+      this.applyViseme();
+    }
+  }
+
+  /**
+   * @method applyViseme
+   * @description Calculates viseme scores and applies them as morph targets to the model's mesh.
+   * All parameters for this calculation are sourced from the injected configuration.
+   */
+  private applyViseme() {
+    const current = this.lipsync.features;
+    if (!current || !this.model || !this.config) return;
+
+    const avg = this.lipsync.getAveragedFeatures();
+    const scores = this.lipsync.computeVisemeScores(
+      current,
+      avg,
+      current.volume - avg.volume,
+      current.centroid - avg.centroid
+    );
+    const adjusted = this.lipsync.adjustScoresForConsistency(scores);
+
+    let dominantViseme = VISEMES.sil;
+    let maxScore = 0;
+
+    const allVisemes = Object.values(VISEMES);
+
+    for (const visemeName of allVisemes) {
+      if (this.VISEME_DETAILS[visemeName].type === 'silent') continue;
+
+      const score = adjusted[visemeName] || 0;
+      if (score > maxScore) {
+        maxScore = score;
+        dominantViseme = visemeName;
+      }
+    }
+
+    const threshold = this.config.lipsyncSettings.activationThreshold;
+    const activeViseme = maxScore > threshold ? dominantViseme : VISEMES.sil;
+
+    const speeds = this.config.lipsyncSettings.smoothing;
+
+    for (const visemeName of allVisemes) {
+      const targetValue = visemeName === activeViseme ? 1.0 : 0.0;
+
+      const visemeType = this.VISEME_DETAILS[visemeName].type;
+      const speed = speeds[visemeType];
+
+      this.lerpMorphTarget(visemeName, targetValue, speed);
+    }
+  }
+
+  /**
+   * @method lerpMorphTarget
+   * @description Smoothly interpolates a morph target to a new value.
+   * @param {string} target - The name of the morph target.
+   * @param {number} value - The target value (usually 0 or 1).
+   * @param {number} speed - The interpolation speed.
+   */
+  private lerpMorphTarget(target: string, value: number, speed = 0.1) {
+    this.model?.traverse((child) => {
+      if (child instanceof THREE.SkinnedMesh) {
+        const dict = child.morphTargetDictionary;
+        const influences = child.morphTargetInfluences;
+        const index = dict?.[target];
+
+        if (index !== undefined && influences?.[index] !== undefined) {
+          influences[index] = THREE.MathUtils.lerp(influences[index], value, speed);
+        }
+      }
+    });
+  }
+
   async speak() {
     if (!this.speechText().trim()) return;
-
     await this.speechService.speak({
       text: this.speechText(),
       voice: this.selectedVoice(),
@@ -131,23 +242,14 @@ export class Character implements OnInit, OnDestroy, Tickable {
     }
   }
 
-  /**
-   * Stops current speech.
-   */
   stopSpeaking() {
     this.speechService.stop();
   }
 
-  /**
-   * Handler for emotion selection changes.
-   */
   onEmotionChange() {
     this.setEmotion(this.selectedEmotion());
   }
 
-  /**
-   * Applies selected emotion and plays corresponding animation.
-   */
   async setEmotion(emotion: string) {
     this.selectedEmotion.set(emotion);
     this.emotionService.setEmotion(emotion);
@@ -159,66 +261,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-  }
-
-  /** Tickable.update implementation */
-  update(deltaTime: number) {
-    this.lipsync.processAudio();
-
-    if (this.model && this.lipsync.features) {
-      this.applyViseme();
-    }
-  }
-
-  private applyViseme() {
-    const current = this.lipsync.features;
-    if (!current) return;
-
-    const avg = this.lipsync.getAveragedFeatures();
-    const volumeDiff = current.volume - avg.volume;
-    const centroidDiff = current.centroid - avg.centroid;
-
-    const scores = this.lipsync.computeVisemeScores(current, avg, volumeDiff, centroidDiff);
-    const adjusted = this.lipsync.adjustScoresForConsistency(scores);
-
-    let maxViseme = 'viseme_sil';
-    let maxValue = 0;
-
-    Object.entries(adjusted).forEach(([key, value]) => {
-      if (value > maxValue) {
-        maxValue = value;
-        maxViseme = key;
-      }
-    });
-
-    const isVowel =
-      maxViseme === 'viseme_aa' ||
-      maxViseme === 'viseme_E' ||
-      maxViseme === 'viseme_I' ||
-      maxViseme === 'viseme_O' ||
-      maxViseme === 'viseme_U';
-
-    this.lerpMorphTarget(maxViseme, 1, isVowel ? 0.2 : 0.6);
-
-    Object.keys(adjusted).forEach((viseme) => {
-      if (viseme !== maxViseme) {
-        this.lerpMorphTarget(viseme, 0, isVowel ? 0.1 : 0.5);
-      }
-    });
-  }
-
-  private lerpMorphTarget(target: string, value: number, speed = 0.1) {
-    this.model?.traverse((child) => {
-      if (child instanceof THREE.SkinnedMesh) {
-        const dict = child.morphTargetDictionary;
-        const influences = child.morphTargetInfluences;
-        const index = dict?.[target];
-
-        if (index !== undefined && influences?.[index] !== undefined) {
-          influences[index] = THREE.MathUtils.lerp(influences[index], value, speed);
-        }
-      }
-    });
   }
 
   async onAudioItemClick(item: [string, string]) {

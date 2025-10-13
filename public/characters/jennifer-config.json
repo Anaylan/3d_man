@@ -1,0 +1,16 @@
+{
+  "modelPath": "/models/Avatar.glb",
+  "emotions": [
+    { "value": "neutral", "label": "Neutral", "path": "/animations/Idle.fbx" },
+    { "value": "happy", "label": "Happy", "path": "/animations/Happy.fbx" },
+    { "value": "sad", "label": "Sad", "path": "/animations/Rejected.fbx" }
+  ],
+  "lipsyncSettings": {
+    "smoothing": {
+      "vowel": 0.2,
+      "consonant": 0.4,
+      "silent": 0.6
+    },
+    "activationThreshold": 0.15
+  }
+}

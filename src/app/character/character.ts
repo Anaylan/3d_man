@@ -34,6 +34,8 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
+  aiResponse = '';
+  userPrompt = '';
 
   // --- All configuration is now provided externally ---
   public config!: CharacterConfig;
@@ -81,6 +83,14 @@ export class Character implements OnInit, OnDestroy, Tickable {
         this.selectedVoice.set(voiceList[0].voiceId);
       }
     });
+
+    effect(() => {
+      const audioEl = this.speechService.getAudioElement();
+      if (audioEl) {
+        this.lipsync.connectAudio(audioEl);
+        console.log('Lipsync connected to audio element');
+      }
+    });
   }
 
   // --- Component State Signals ---
@@ -109,7 +119,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     // --- Load configuration from the service ---
     this.config = this.configService.getConfig('jennifer');
     await this.spawn();
-    
+
     // --- Set the default emotion from the loaded config ---
     if (this.config.emotions.length > 0) {
       await this.setEmotion(this.config.emotions[0].value);
@@ -229,20 +239,37 @@ export class Character implements OnInit, OnDestroy, Tickable {
   }
 
   async speak() {
-    if (!this.speechText().trim()) return;
-    await this.speechService.speak({
-      text: this.speechText(),
+    this.aiResponse = '';
+
+    this.speechService.startStreaming({
       voice: this.selectedVoice(),
       rate: this.speechSpeed(),
       volume: this.volume(),
-      preservesPitch: this.preservesPitch()
+      preservesPitch: this.preservesPitch(),
+      minChunkLength: 50,
+      maxChunkLength: 300,
+      bufferTimeout: 1500,
     });
 
-    const audioEl = this.speechService.getAudioElement();
-    if (audioEl) {
-      audioEl.loop = this.loopAudio();
-      this.lipsync.connectAudio(audioEl);
+    const fullText = this.speechText();
+    const words = fullText.split(' ');
+
+    for (const word of words) {
+      if (!this.speechService.isGenerating()) {
+        break;
+      }
+
+      this.aiResponse += word + ' ';
+      await this.speechService.addTextChunk(word + ' ');
+
+      await this.sleep(Math.random() * 100 + 50);
     }
+
+    await this.speechService.finalizeStreaming();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   stopSpeaking() {
@@ -282,7 +309,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.speechService.configureAudio(audioEl, item[1], {
       rate: this.speechSpeed(),
       volume: this.volume(),
-      preservesPitch: this.preservesPitch()
+      preservesPitch: this.preservesPitch(),
     });
 
     this.speechService.isSpeaking.set(true);

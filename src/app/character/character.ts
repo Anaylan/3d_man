@@ -34,8 +34,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
-  aiResponse = '';
-  userPrompt = '';
 
   // --- All configuration is now provided externally ---
   public config!: CharacterConfig;
@@ -88,7 +86,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
       const audioEl = this.speechService.getAudioElement();
       if (audioEl) {
         this.lipsync.connectAudio(audioEl);
-        console.log('Lipsync connected to audio element');
       }
     });
   }
@@ -238,38 +235,55 @@ export class Character implements OnInit, OnDestroy, Tickable {
     });
   }
 
-  async speak() {
-    this.aiResponse = '';
+  private wordQueue: string[] = [];
+  private streamController: ReadableStreamDefaultController<string> | null = null;
+  private isStreaming = false;
+  private isProcessing = false;
 
-    this.speechService.startStreaming({
-      voice: this.selectedVoice(),
-      rate: this.speechSpeed(),
-      volume: this.volume(),
-      preservesPitch: this.preservesPitch(),
-      minChunkLength: 50,
-      maxChunkLength: 300,
-      bufferTimeout: 1500,
-    });
+  async speak(event: KeyboardEvent) {
+    if (event.code === 'Space' || event.key === ' ') {
+      const text = this.speechText().trim();
+      if (!text) return;
 
-    const fullText = this.speechText();
-    const words = fullText.split(' ');
+      const words = text.split(/\s+/);
+      const lastWord = words.at(-1);
+      if (!lastWord) return;
 
-    for (const word of words) {
-      if (!this.speechService.isGenerating()) {
-        break;
+      // Добавляем слово в очередь
+      this.wordQueue.push(lastWord);
+
+      // Если поток не идёт — запускаем
+      if (!this.isStreaming) {
+        this.isStreaming = true;
+
+        const stream = new ReadableStream<string>({
+          start: async (controller) => {
+            this.streamController = controller;
+            while (this.wordQueue.length > 0) {
+              const word = this.wordQueue.shift();
+              // wtf?? how do that??
+              if (word) controller.enqueue(`${word}`);
+              await new Promise((r) => setTimeout(r, 80 + Math.random() * 60));
+            }
+          },
+          cancel: () => {
+            this.streamController = null;
+            this.isStreaming = false;
+          },
+        });
+
+        this.speechService.startStreaming({
+          textStream: stream,
+          voice: this.selectedVoice(),
+          rate: this.speechSpeed(),
+          volume: this.volume(),
+          preservesPitch: this.preservesPitch(),
+        });
+      } else {
+        // Если поток уже активен — добавляем слово сразу
+        this.streamController?.enqueue(`${lastWord}`);
       }
-
-      this.aiResponse += word + ' ';
-      await this.speechService.addTextChunk(word + ' ');
-
-      await this.sleep(Math.random() * 100 + 50);
     }
-
-    await this.speechService.finalizeStreaming();
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   stopSpeaking() {
@@ -313,7 +327,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
     });
 
     this.speechService.isSpeaking.set(true);
-    this.lipsync.connectAudio(audioEl);
     await audioEl.play();
   }
 }

@@ -11,33 +11,29 @@ export interface SpeechSynthesisOptions {
 }
 
 export interface StreamingSpeechOptions extends Omit<SpeechSynthesisOptions, 'text'> {
-  minChunkLength?: number;
-  maxChunkLength?: number;
-  bufferTimeout?: number;
+  textStream?: ReadableStream<string>;
 }
 
 @Injectable({ providedIn: 'any' })
 export class SpeechService {
+  // --- Public Signals ---
   isSpeaking = signal(false);
   isGenerating = signal(false);
   audioQueueLength = signal(0);
   voices = signal<VoiceOption[]>([]);
   audioElement = signal<HTMLAudioElement | null>(null);
-  openaiTtsService: OpenaiTtsService = inject(OpenaiTtsService);
 
-  // Streaming properties
-  private textBuffer = '';
+  // --- Private Dependencies ---
+  private readonly cacheService = inject(CacheService);
+  private readonly openaiTtsService = inject(OpenaiTtsService);
+
+  // --- Streaming State ---
   private audioQueue: HTMLAudioElement[] = [];
   private pendingRequests = 0;
-  private bufferTimer: any = null;
-  private currentStreamOptions: StreamingSpeechOptions | null = null;
+  private currentStreamOptions: Omit<StreamingSpeechOptions, 'textStream'> | null = null;
+  private streamReader: ReadableStreamDefaultReader<string> | null = null;
 
-  // Buffer config by default
-  private readonly DEFAULT_MIN_CHUNK_LENGTH = 100;
-  private readonly DEFAULT_MAX_CHUNK_LENGTH = 500;
-  private readonly DEFAULT_BUFFER_TIMEOUT = 2000;
-
-  constructor(private cacheService: CacheService) {
+  constructor() {
     this.loadVoices();
   }
 
@@ -51,7 +47,7 @@ export class SpeechService {
     const audio = new Audio();
 
     const key = `${options.voice || 'default'}: ${options.text}`;
-    const blob = await this.getOrGenerateAudio(key, options);
+    const blob = await this._getOrGenerateAudio(key, options);
     const url = URL.createObjectURL(blob);
 
     this.configureAudio(audio, url, options);
@@ -65,63 +61,41 @@ export class SpeechService {
    */
   startStreaming(options: StreamingSpeechOptions): void {
     this.stop();
-    this.currentStreamOptions = {
-      ...options,
-      minChunkLength: options.minChunkLength ?? this.DEFAULT_MIN_CHUNK_LENGTH,
-      maxChunkLength: options.maxChunkLength ?? this.DEFAULT_MAX_CHUNK_LENGTH,
-      bufferTimeout: options.bufferTimeout ?? this.DEFAULT_BUFFER_TIMEOUT,
-    };
     this.isGenerating.set(true);
-    this.textBuffer = '';
-    this.audioQueue = [];
-    this.audioQueueLength.set(0);
+
+    const { textStream, ...streamOptions } = options;
+    this.currentStreamOptions = streamOptions;
+
+    this._processTextStream(textStream!).catch((error) => {
+      if (error.name !== 'AbortError') {
+        console.error('Error processing text stream:', error);
+      }
+    });
   }
 
   /**
-   * add chunk
+   * Reads from a text stream and feeds chunks into the service.
    */
-  async addTextChunk(chunk: string): Promise<void> {
-    if (!this.isGenerating()) {
-      console.warn('Streaming not started. Call startStreaming() first.');
-      return;
-    }
+  private async _processTextStream(stream: ReadableStream<string>): Promise<void> {
+    this.streamReader = stream.getReader();
 
-    this.textBuffer += chunk;
+    try {
+      while (this.isGenerating()) {
+        const { value, done } = await this.streamReader.read();
 
-    if (this.bufferTimer) {
-      clearTimeout(this.bufferTimer);
-    }
-
-    if (this.shouldProcessBuffer()) {
-      await this.processBuffer();
-    } else {
-      this.bufferTimer = setTimeout(() => {
-        if (this.textBuffer.length > 0) {
-          this.processBuffer();
+        if (done) {
+          break;
         }
-      }, this.currentStreamOptions!.bufferTimeout);
-    }
-  }
 
-  /**
-   * end streaming
-   */
-  async finalizeStreaming(): Promise<void> {
-    if (!this.isGenerating()) {
-      return;
-    }
-
-    if (this.bufferTimer) {
-      clearTimeout(this.bufferTimer);
-      this.bufferTimer = null;
-    }
-
-    if (this.textBuffer.trim()) {
-      await this.processBuffer();
-    }
-
-    while (this.pendingRequests > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+        if (value) {
+          await this._generateAndQueueAudio(value);
+        }
+      }
+    } finally {
+      if (this.streamReader) {
+        this.streamReader.releaseLock();
+        this.streamReader = null;
+      }
     }
 
     this.isGenerating.set(false);
@@ -131,95 +105,56 @@ export class SpeechService {
   /**
    * 
    */
-  private shouldProcessBuffer(): boolean {
-    if (!this.currentStreamOptions) return false;
+  private async _generateAndQueueAudio(textChunk: string): Promise<void> {
+    const trimmedChunk = textChunk.trim();
+    if (!trimmedChunk || !this.currentStreamOptions) return;
 
-    const buffer = this.textBuffer.trim();
-
-    if (buffer.length < this.currentStreamOptions.minChunkLength!) {
-      return false;
-    }
-
-    if (buffer.length >= this.currentStreamOptions.maxChunkLength!) {
-      return true;
-    }
-
-    const endsWithPause = /[.!?,;:]\s*$/.test(buffer);
-
-    return endsWithPause;
-  }
-
-  /**
-   * 
-   */
-  private async processBuffer(): Promise<void> {
-    const textToProcess = this.textBuffer.trim();
-    if (!textToProcess || !this.currentStreamOptions) return;
-
-    this.textBuffer = '';
     this.pendingRequests++;
-
     try {
       const options: SpeechSynthesisOptions = {
-        text: textToProcess,
+        text: trimmedChunk,
         voice: this.currentStreamOptions.voice,
         rate: this.currentStreamOptions.rate,
         volume: this.currentStreamOptions.volume,
-        preservesPitch: this.currentStreamOptions.preservesPitch,
       };
 
-      const key = `${options.voice || 'default'}: ${textToProcess}`;
-      const blob = await this.getOrGenerateAudio(key, options);
-      const url = URL.createObjectURL(blob);
+      const key = `${options.voice || 'default'}: ${trimmedChunk}`;
+      const blob = await this._getOrGenerateAudio(key, options);
+      if (blob.size === 0) return;
 
-      const audio = new Audio();
-      this.configureStreamingAudio(audio, url, options);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.playbackRate = options.rate ?? 1.0;
+      audio.volume = options.volume ?? 1.0;
+
+      const onFinish = () => {
+        URL.revokeObjectURL(url);
+        this._playNextInQueue();
+        audio.removeEventListener('ended', onFinish);
+        audio.removeEventListener('error', onFinish);
+      };
+
+      audio.addEventListener('ended', onFinish);
+      audio.addEventListener('error', onFinish);
 
       this.audioQueue.push(audio);
       this.audioQueueLength.set(this.audioQueue.length);
 
       if (!this.isSpeaking()) {
-        this.playNextInQueue();
+        this._playNextInQueue();
       }
     } catch (error) {
-      console.error('Error processing buffer:', error);
+      console.error('Error processing text chunk:', error);
     } finally {
       this.pendingRequests--;
     }
   }
 
   /**
-   * 
    */
-  private configureStreamingAudio(
-    audioRef: HTMLAudioElement,
-    url: string,
-    options: SpeechSynthesisOptions
-  ): void {
-    audioRef.src = url;
-    audioRef.playbackRate = options.rate ?? 1.0;
-    audioRef.volume = options.volume ?? 1.0;
-    audioRef.preservesPitch = options.preservesPitch ?? true;
-
-    audioRef.onended = () => {
-      URL.revokeObjectURL(url);
-      this.playNextInQueue();
-    };
-
-    audioRef.onerror = (error) => {
-      console.error('Audio playback error:', error);
-      URL.revokeObjectURL(url);
-      this.playNextInQueue();
-    };
-  }
-
-  /**
-   * 
-   */
-  private playNextInQueue(): void {
+  private _playNextInQueue(): void {
     if (this.audioQueue.length === 0) {
       this.isSpeaking.set(false);
-      this.audioQueueLength.set(0);
       this.audioElement.set(null);
       return;
     }
@@ -231,12 +166,12 @@ export class SpeechService {
 
     audio.play().catch((error) => {
       console.error('Playback error:', error);
-      this.playNextInQueue();
+      this._playNextInQueue();
     });
   }
 
   /**
-   * 
+   *
    */
   public configureAudio(
     audioRef: HTMLAudioElement,
@@ -260,17 +195,17 @@ export class SpeechService {
     };
   }
 
-  private async getOrGenerateAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
+  private async _getOrGenerateAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
     const cachedBlob = (await this.cacheService.get(key)) as Blob;
 
     if (cachedBlob) {
       return cachedBlob;
     }
 
-    return await this.generateAndCacheAudio(key, options);
+    return await this._generateAndCacheAudio(key, options);
   }
 
-  private generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
+  private _generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
     return new Promise((resolve) => {
       this.openaiTtsService
         .generateSpeech(options.text!, {
@@ -290,33 +225,37 @@ export class SpeechService {
     });
   }
 
-  stop(): void {
-    this.audioElement.update((_value) => {
-      if (_value) {
-        _value.pause();
-        _value.currentTime = 0;
-      }
-      return _value;
-    });
+  private _stopAndClearAudio(audio: HTMLAudioElement): void {
+    audio.pause();
+    audio.currentTime = 0;
+    if (audio.src && audio.src.startsWith('blob:')) {
+      URL.revokeObjectURL(audio.src);
+    }
+    audio.src = '';
+    audio.onended = null;
+    audio.onerror = null;
+  }
 
-    this.audioQueue.forEach((audio) => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
+  stop(): void {
+    const currentAudio = this.audioElement();
+    if (currentAudio) {
+      this._stopAndClearAudio(currentAudio);
+    }
+    this.audioElement.set(null);
+
+    this.audioQueue.forEach((audio) => this._stopAndClearAudio(audio));
     this.audioQueue = [];
+
+    if (this.streamReader) {
+      this.streamReader.cancel();
+      this.streamReader = null;
+    }
 
     this.isSpeaking.set(false);
     this.isGenerating.set(false);
     this.audioQueueLength.set(0);
-    this.textBuffer = '';
     this.pendingRequests = 0;
-
-    if (this.bufferTimer) {
-      clearTimeout(this.bufferTimer);
-      this.bufferTimer = null;
-    }
-
-    this.cleanupAudio();
+    this.currentStreamOptions = null;
   }
 
   private loadVoices(): void {

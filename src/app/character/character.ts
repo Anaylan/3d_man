@@ -238,7 +238,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private wordQueue: string[] = [];
   private streamController: ReadableStreamDefaultController<string> | null = null;
   private isStreaming = false;
-  private isProcessing = false;
 
   async speak(event: KeyboardEvent) {
     if (event.code === 'Space' || event.key === ' ') {
@@ -249,10 +248,8 @@ export class Character implements OnInit, OnDestroy, Tickable {
       const lastWord = words.at(-1);
       if (!lastWord) return;
 
-      // Добавляем слово в очередь
       this.wordQueue.push(lastWord);
 
-      // Если поток не идёт — запускаем
       if (!this.isStreaming) {
         this.isStreaming = true;
 
@@ -280,7 +277,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
           preservesPitch: this.preservesPitch(),
         });
       } else {
-        // Если поток уже активен — добавляем слово сразу
         this.streamController?.enqueue(`${lastWord}`);
       }
     }

@@ -247,6 +247,26 @@ export class Character implements OnInit, OnDestroy, Tickable {
     }
   }
 
+  async speakStream(textStream: ReadableStream<string>) {
+    const reader = textStream.getReader();
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) break;
+
+        if (value?.trim()) {
+          await this.speak(value);
+        }
+      }
+    } catch (error) {
+      console.error('Error reading text stream:', error);
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   async speak(text: string) {
     await this.speechService.speak({
       text,

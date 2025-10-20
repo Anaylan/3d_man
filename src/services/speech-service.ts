@@ -10,10 +10,6 @@ export interface SpeechSynthesisOptions {
   preservesPitch?: boolean;
 }
 
-export interface StreamingSpeechOptions extends Omit<SpeechSynthesisOptions, 'text'> {
-  textStream?: ReadableStream<string>;
-}
-
 @Injectable({ providedIn: 'any' })
 export class SpeechService {
   // --- Public Signals ---
@@ -29,9 +25,6 @@ export class SpeechService {
 
   // --- Streaming State ---
   private audioQueue: HTMLAudioElement[] = [];
-  private pendingRequests = 0;
-  private currentStreamOptions: Omit<StreamingSpeechOptions, 'textStream'> | null = null;
-  private streamReader: ReadableStreamDefaultReader<string> | null = null;
 
   constructor() {
     this.loadVoices();
@@ -41,112 +34,36 @@ export class SpeechService {
    * Legacy
    */
   async speak(options: SpeechSynthesisOptions) {
-    this.stop();
-    this.isSpeaking.set(true);
+    if (!options.text?.trim()) return;
 
     const audio = new Audio();
 
     const key = `${options.voice || 'default'}: ${options.text}`;
     const blob = await this._getOrGenerateAudio(key, options);
+
+    if (blob.size === 0) return;
     const url = URL.createObjectURL(blob);
 
-    this.configureAudio(audio, url, options);
-    this.audioElement.set(audio);
+    audio.src = url;
+    audio.playbackRate = options.rate ?? 1.0;
+    audio.volume = options.volume ?? 1.0;
+    audio.preservesPitch = options.preservesPitch ?? true;
 
-    await audio.play();
-  }
+    const onFinish = () => {
+      URL.revokeObjectURL(url);
+      this._playNextInQueue();
+      audio.removeEventListener('ended', onFinish);
+      audio.removeEventListener('error', onFinish);
+    };
 
-  /**
-   * New: maybe bot correct
-   */
-  startStreaming(options: StreamingSpeechOptions): void {
-    this.stop();
-    this.isGenerating.set(true);
+    audio.addEventListener('ended', onFinish);
+    audio.addEventListener('error', onFinish);
 
-    const { textStream, ...streamOptions } = options;
-    this.currentStreamOptions = streamOptions;
+    this.audioQueue.push(audio);
+    this.audioQueueLength.set(this.audioQueue.length);
 
-    this._processTextStream(textStream!).catch((error) => {
-      if (error.name !== 'AbortError') {
-        console.error('Error processing text stream:', error);
-      }
-    });
-  }
-
-  /**
-   * Reads from a text stream and feeds chunks into the service.
-   */
-  private async _processTextStream(stream: ReadableStream<string>): Promise<void> {
-    this.streamReader = stream.getReader();
-
-    try {
-      while (this.isGenerating()) {
-        const { value, done } = await this.streamReader.read();
-
-        if (done) {
-          break;
-        }
-
-        if (value) {
-          await this._generateAndQueueAudio(value);
-        }
-      }
-    } finally {
-      if (this.streamReader) {
-        this.streamReader.releaseLock();
-        this.streamReader = null;
-      }
-    }
-
-    this.isGenerating.set(false);
-    this.currentStreamOptions = null;
-  }
-
-  /**
-   * 
-   */
-  private async _generateAndQueueAudio(textChunk: string): Promise<void> {
-    const trimmedChunk = textChunk.trim();
-    if (!trimmedChunk || !this.currentStreamOptions) return;
-
-    this.pendingRequests++;
-    try {
-      const options: SpeechSynthesisOptions = {
-        text: trimmedChunk,
-        voice: this.currentStreamOptions.voice,
-        rate: this.currentStreamOptions.rate,
-        volume: this.currentStreamOptions.volume,
-      };
-
-      const key = `${options.voice || 'default'}: ${trimmedChunk}`;
-      const blob = await this._getOrGenerateAudio(key, options);
-      if (blob.size === 0) return;
-
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.playbackRate = options.rate ?? 1.0;
-      audio.volume = options.volume ?? 1.0;
-
-      const onFinish = () => {
-        URL.revokeObjectURL(url);
-        this._playNextInQueue();
-        audio.removeEventListener('ended', onFinish);
-        audio.removeEventListener('error', onFinish);
-      };
-
-      audio.addEventListener('ended', onFinish);
-      audio.addEventListener('error', onFinish);
-
-      this.audioQueue.push(audio);
-      this.audioQueueLength.set(this.audioQueue.length);
-
-      if (!this.isSpeaking()) {
-        this._playNextInQueue();
-      }
-    } catch (error) {
-      console.error('Error processing text chunk:', error);
-    } finally {
-      this.pendingRequests--;
+    if (!this.isSpeaking()) {
+      this._playNextInQueue();
     }
   }
 
@@ -246,16 +163,8 @@ export class SpeechService {
     this.audioQueue.forEach((audio) => this._stopAndClearAudio(audio));
     this.audioQueue = [];
 
-    if (this.streamReader) {
-      this.streamReader.cancel();
-      this.streamReader = null;
-    }
-
     this.isSpeaking.set(false);
-    this.isGenerating.set(false);
     this.audioQueueLength.set(0);
-    this.pendingRequests = 0;
-    this.currentStreamOptions = null;
   }
 
   private loadVoices(): void {

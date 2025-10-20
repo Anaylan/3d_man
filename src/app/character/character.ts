@@ -16,7 +16,6 @@ import { OpenaiTtsService } from '../openai-tts';
 import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
 import { CharacterConfigService } from './character-config.service';
-import { threshold } from 'three/src/nodes/TSL.js';
 
 /**
  * @class Character
@@ -235,11 +234,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     });
   }
 
-  private wordQueue: string[] = [];
-  private streamController: ReadableStreamDefaultController<string> | null = null;
-  private isStreaming = false;
-
-  async speak(event: KeyboardEvent) {
+  async onKeyDown(event: KeyboardEvent) {
     if (event.code === 'Space' || event.key === ' ') {
       const text = this.speechText().trim();
       if (!text) return;
@@ -248,38 +243,18 @@ export class Character implements OnInit, OnDestroy, Tickable {
       const lastWord = words.at(-1);
       if (!lastWord) return;
 
-      this.wordQueue.push(lastWord);
-
-      if (!this.isStreaming) {
-        this.isStreaming = true;
-
-        const stream = new ReadableStream<string>({
-          start: async (controller) => {
-            this.streamController = controller;
-            while (this.wordQueue.length > 0) {
-              const word = this.wordQueue.shift();
-              // wtf?? how do that??
-              if (word) controller.enqueue(`${word}`);
-              await new Promise((r) => setTimeout(r, 80 + Math.random() * 60));
-            }
-          },
-          cancel: () => {
-            this.streamController = null;
-            this.isStreaming = false;
-          },
-        });
-
-        this.speechService.startStreaming({
-          textStream: stream,
-          voice: this.selectedVoice(),
-          rate: this.speechSpeed(),
-          volume: this.volume(),
-          preservesPitch: this.preservesPitch(),
-        });
-      } else {
-        this.streamController?.enqueue(`${lastWord}`);
-      }
+      await this.speak(lastWord);
     }
+  }
+
+  async speak(text: string) {
+    await this.speechService.speak({
+      text,
+      voice: this.selectedVoice(),
+      rate: this.speechSpeed(),
+      volume: this.volume(),
+      preservesPitch: this.preservesPitch(),
+    });
   }
 
   stopSpeaking() {

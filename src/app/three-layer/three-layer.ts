@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
@@ -8,14 +8,14 @@ import { Character } from '../character/character';
 @Component({
   selector: 'app-three-layer',
   imports: [Character],
-  providers: [{ provide: Window, useValue: window }],
+  // providers: [{ provide: Window, useValue: window }],
   templateUrl: './three-layer.html',
   styleUrl: './three-layer.scss',
 })
 export class ThreeLayer implements OnInit, OnDestroy {
   constructor(
     public threeService: ThreeService,
-    private window: Window,
+    private elementRef: ElementRef,
     private tickService: TickService
   ) {}
 
@@ -24,18 +24,28 @@ export class ThreeLayer implements OnInit, OnDestroy {
   private clock: THREE.Clock = new THREE.Clock();
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
+  private resizeObserver?: ResizeObserver;
+
+  private getParentSize() {
+    const parent = this.elementRef.nativeElement.parentElement;
+    if (!parent) {
+      return { width: 800, height: 600 };
+    }
+
+    const rect = parent.getBoundingClientRect();
+    return {
+      width: rect.width || parent.offsetWidth,
+      height: rect.height || parent.offsetHeight,
+    };
+  }
 
   protected init() {
-    const width = this.window.innerWidth,
-      height = this.window.innerHeight;
+    const { width, height } = this.getParentSize();
+    const parrent = this.elementRef.nativeElement.parrentElement;
 
     this.scene = this.threeService.createScene();
     this.camera = this.threeService.createCamera(width, height, 70, 0.1, 1000);
-    this.renderer = this.threeService.createRenderer(
-      document.querySelector('app-three-layer')!,
-      width,
-      height
-    );
+    this.renderer = this.threeService.createRenderer(this.elementRef.nativeElement, width, height);
 
     const gridHelper = new THREE.GridHelper(200, 500);
     this.scene.add(gridHelper);

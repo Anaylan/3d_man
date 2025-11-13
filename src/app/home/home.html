@@ -29,12 +29,9 @@
                         <button
                             class="h-8 w-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-95"
                             aria-label="Attachments">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                                viewBox="0 0 256 256">
-                                <path
-                                    d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z">
-                                </path>
-                            </svg>
+                            <span class="material-icons-outlined">
+                                add
+                            </span>
                         </button>
 
                     </div>
@@ -42,12 +39,9 @@
                     <button
                         class="h-8 w-8 rounded-lg flex items-center justify-center bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
                         [disabled]="message().trim().length <= 0" (click)="sendMessage()" aria-label="Send message">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            viewBox="0 0 256 256">
-                            <path
-                                d="M208.49,120.49a12,12,0,0,1-17,0L140,69V216a12,12,0,0,1-24,0V69L64.49,120.49a12,12,0,0,1-17-17l72-72a12,12,0,0,1,17,0l72,72A12,12,0,0,1,208.49,120.49Z">
-                            </path>
-                        </svg>
+                        <span class="material-icons-outlined">
+                            arrow_upward
+                        </span>
                     </button>
                 </div>
             </div>

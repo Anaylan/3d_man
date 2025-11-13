@@ -55,4 +55,8 @@ export class AnimatorService implements Tickable {
   public isReady(): boolean {
     return this.actions.size > 0;
   }
+
+  public getActions(): Map<string, THREE.AnimationAction> {
+    return this.actions;
+  }
 }

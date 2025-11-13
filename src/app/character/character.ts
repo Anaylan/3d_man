@@ -17,6 +17,9 @@ import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
 import { CharacterConfigService } from './character-config.service';
 
+import { GUI } from 'dat.gui';
+import { rand } from 'three/src/nodes/TSL.js';
+
 /**
  * @class Character
  * @description A reusable component that hosts a 3D model and wires up all related services.
@@ -149,6 +152,23 @@ export class Character implements OnInit, OnDestroy, Tickable {
     const animMap = new Map(this.config.emotions.map(({ value, path }) => [value, path]));
     this.animatorService = new AnimatorService(this.model);
     this.animatorService.setMap(animMap);
+
+    const gui = new GUI();
+    Object.entries(this).forEach(([key, value]: any) => {
+      if (typeof value === 'function' && 'set' in value) {
+        const signal = value;
+        let options;
+
+        if (key === 'selectedEmotion') options = this.config.emotions.map((e) => e.value);
+        if (key === 'selectedVoice') options = this.speechService.voices().map((e) => e.voiceId);
+
+        const controller = options
+          ? gui.add({ value: signal() }, 'value', options)
+          : gui.add({ value: signal() }, 'value');
+
+        controller.name(key).onChange((v: any) => signal.set(v));
+      }
+    });
 
     this.tickService.registerTickable(this.animatorService);
   }

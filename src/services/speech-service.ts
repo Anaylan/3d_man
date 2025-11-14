@@ -1,4 +1,4 @@
-import { OpenaiTtsService, VoiceOption } from '@/app/openai-tts';
+import { OpenaiService, VoiceOption } from '@/services/openai';
 import { inject, Injectable, signal } from '@angular/core';
 import { CacheService } from './cache-service';
 
@@ -21,7 +21,7 @@ export class SpeechService {
 
   // --- Private Dependencies ---
   private readonly cacheService = inject(CacheService);
-  private readonly openaiTtsService = inject(OpenaiTtsService);
+  private readonly openaiService = inject(OpenaiService);
 
   // --- Streaming State ---
   private audioQueue: HTMLAudioElement[] = [];
@@ -30,36 +30,36 @@ export class SpeechService {
     this.loadVoices();
   }
 
-  /**
-   * Legacy
-   */
   async speak(options: SpeechSynthesisOptions) {
     if (!options.text?.trim()) return;
 
-    const audio = new Audio();
-
     const key = `${options.voice || 'default'}: ${options.text}`;
-    const blob = await this._getOrGenerateAudio(key, options);
 
-    if (blob.size === 0) return;
-    const url = URL.createObjectURL(blob);
+    const audioPromise = this._getOrGenerateAudio(key, options).then((blob) => {
+      if (blob.size === 0) return null;
 
-    audio.src = url;
-    audio.playbackRate = options.rate ?? 1.0;
-    audio.volume = options.volume ?? 1.0;
-    audio.preservesPitch = options.preservesPitch ?? true;
+      const audio = new Audio();
+      const url = URL.createObjectURL(blob);
 
-    const onFinish = () => {
-      URL.revokeObjectURL(url);
-      this._playNextInQueue();
-      audio.removeEventListener('ended', onFinish);
-      audio.removeEventListener('error', onFinish);
-    };
+      audio.src = url;
+      audio.playbackRate = options.rate ?? 1.0;
+      audio.volume = options.volume ?? 1.0;
+      audio.preservesPitch = options.preservesPitch ?? true;
 
-    audio.addEventListener('ended', onFinish);
-    audio.addEventListener('error', onFinish);
+      const onFinish = () => {
+        URL.revokeObjectURL(url);
+        this._playNextInQueue();
+        audio.removeEventListener('ended', onFinish);
+        audio.removeEventListener('error', onFinish);
+      };
 
-    this.audioQueue.push(audio);
+      audio.addEventListener('ended', onFinish);
+      audio.addEventListener('error', onFinish);
+
+      return audio;
+    });
+
+    this.audioQueue.push(audioPromise as any);
     this.audioQueueLength.set(this.audioQueue.length);
 
     if (!this.isSpeaking()) {
@@ -69,7 +69,7 @@ export class SpeechService {
 
   /**
    */
-  private _playNextInQueue(): void {
+  private async _playNextInQueue(): Promise<void> {
     if (this.audioQueue.length === 0) {
       this.isSpeaking.set(false);
       this.audioElement.set(null);
@@ -77,11 +77,19 @@ export class SpeechService {
     }
 
     this.isSpeaking.set(true);
-    const audio = this.audioQueue.shift()!;
+
+    const audioOrPromise = this.audioQueue.shift()!;
     this.audioQueueLength.set(this.audioQueue.length);
+
+    const audio = audioOrPromise instanceof Promise ? await audioOrPromise : audioOrPromise;
+    if (!audio) {
+      this._playNextInQueue();
+      return;
+    }
+
     this.audioElement.set(audio);
 
-    audio.play().catch((error) => {
+    audio.play().catch((error: any) => {
       console.error('Playback error:', error);
       this._playNextInQueue();
     });
@@ -124,7 +132,7 @@ export class SpeechService {
 
   private _generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
     return new Promise((resolve) => {
-      this.openaiTtsService
+      this.openaiService
         .generateSpeech(options.text!, {
           voice: options.voice!,
         })
@@ -168,7 +176,7 @@ export class SpeechService {
   }
 
   private loadVoices(): void {
-    this.voices.set(this.openaiTtsService.getVoices());
+    this.voices.set(this.openaiService.getVoices());
   }
 
   public getAudioElement(): HTMLAudioElement | null {

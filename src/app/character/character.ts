@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as THREE from 'three';
@@ -12,13 +12,11 @@ import { TickService } from '@/services/tick-service';
 import { EmotionService } from '@/services/emotion-service';
 import { SpeechService } from '@/services/speech-service';
 import { ThreeService } from '@/services/three-service';
-import { OpenaiTtsService } from '../openai-tts';
 import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
 import { CharacterConfigService } from './character-config.service';
-
 import { GUI } from 'dat.gui';
-import { rand } from 'three/src/nodes/TSL.js';
+import { OpenaiService } from '@/services/openai';
 
 /**
  * @class Character
@@ -67,11 +65,11 @@ export class Character implements OnInit, OnDestroy, Tickable {
     viseme_sil: { type: 'silent' },
   };
 
+  private readonly openaiService = inject(OpenaiService);
   constructor(
     public threeService: ThreeService,
     public emotionService: EmotionService,
     public speechService: SpeechService,
-    public openaiTtsService: OpenaiTtsService,
     private tickService: TickService,
     // --- Configuration is injected here ---
     private configService: CharacterConfigService
@@ -90,10 +88,17 @@ export class Character implements OnInit, OnDestroy, Tickable {
         this.lipsync.connectAudio(audioEl);
       }
     });
+
+    this.openaiService.responseGenerated$.subscribe(async (text) => {
+      console.log(text);
+      if (text.trim()) {
+        await this.speak(text);
+      }
+    });
   }
 
   // --- Component State Signals ---
-  speechText = signal('Hey! How are you doing?');
+  debugSpeechText = signal('Hey! How are you doing?');
   selectedEmotion = signal('neutral');
   selectedVoice = signal('');
   speechSpeed = signal(1);
@@ -256,7 +261,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
   async onKeyDown(event: KeyboardEvent) {
     if (event.code === 'Space' || event.key === ' ') {
-      const text = this.speechText().trim();
+      const text = this.debugSpeechText().trim();
       if (!text) return;
 
       const words = text.split(/\s+/);

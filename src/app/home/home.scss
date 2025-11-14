@@ -1,1 +1,12 @@
 @import 'material-icons/iconfont/material-icons.css';
+@import 'material-symbols';
+@reference "tailwindcss";
+
+[contenteditable][data-placeholder]:empty:before {
+  content: attr(data-placeholder);
+  @apply text-slate-400 dark:text-slate-500 pointer-events-none;
+}
+
+[contenteditable][data-placeholder]:not(:empty):before {
+  content: none;
+}

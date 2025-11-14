@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable } from '@angular/core';
 import * as THREE from 'three';
 
 @Injectable({
@@ -24,8 +24,6 @@ export class ThreeService {
     far?: number
   ): THREE.PerspectiveCamera {
     this.camera = new THREE.PerspectiveCamera(fov, width / height, near, far);
-    this.camera.position.set(0, 0, 5);
-
     return this.camera;
   }
 
@@ -44,10 +42,7 @@ export class ThreeService {
   public createLights(): void {
     const ambientLight = new THREE.AmbientLight(0xffffff, 8);
     this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 5, 5);
-    this.scene.add(directionalLight);
+    // this.scene.fog = new THREE.FogExp2(0xcccccc, 0.01);
   }
 
   public getScene(): THREE.Scene {

@@ -38,6 +38,9 @@ importers:
       material-icons:
         specifier: ^1.13.14
         version: 1.13.14
+      material-symbols:
+        specifier: ^0.39.3
+        version: 0.39.3
       ngxtension:
         specifier: ^6.0.0
         version: 6.0.0(@angular/common@20.3.0(@angular/core@20.3.0(@angular/compiler@20.3.0)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@20.3.0(@angular/compiler@20.3.0)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2)
@@ -2334,6 +2337,9 @@ packages:
 
   material-icons@1.13.14:
     resolution: {integrity: sha512-kZOfc7xCC0rAT8Q3DQixYAeT+tBqZnxkseQtp2bxBxz7q5pMAC+wmit7vJn1g/l7wRU+HEPq23gER4iPjGs5Cg==}
+
+  material-symbols@0.39.3:
+    resolution: {integrity: sha512-74aewr9UBMa6jP/noVVFgegMUXkz0OiH3iL+ES0adWqvKgExHv1dxL5TjDIyGwS2VwjRjEGCsRufZRJv6hA0lQ==}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -5451,6 +5457,8 @@ snapshots:
       - supports-color
 
   material-icons@1.13.14: {}
+
+  material-symbols@0.39.3: {}
 
   math-intrinsics@1.1.0: {}
 

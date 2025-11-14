@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
@@ -8,11 +8,13 @@ import { Character } from '../character/character';
 @Component({
   selector: 'app-three-layer',
   imports: [Character],
-  // providers: [{ provide: Window, useValue: window }],
   templateUrl: './three-layer.html',
   styleUrl: './three-layer.scss',
 })
 export class ThreeLayer implements OnInit, OnDestroy {
+  @Input() cameraPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  @Input() controlRotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+
   constructor(
     public threeService: ThreeService,
     private elementRef: ElementRef,
@@ -24,7 +26,6 @@ export class ThreeLayer implements OnInit, OnDestroy {
   private clock: THREE.Clock = new THREE.Clock();
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
-  private resizeObserver?: ResizeObserver;
 
   private getParentSize() {
     const parent = this.elementRef.nativeElement.parentElement;
@@ -39,9 +40,22 @@ export class ThreeLayer implements OnInit, OnDestroy {
     };
   }
 
+  @HostListener('window:resize')
+  onWindowResize() {
+    const { width, height } = this.getParentSize();
+
+    if (this.camera) {
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+    }
+
+    if (this.renderer) {
+      this.renderer.setSize(width, height);
+    }
+  }
+
   protected init() {
     const { width, height } = this.getParentSize();
-    const parrent = this.elementRef.nativeElement.parrentElement;
 
     this.scene = this.threeService.createScene();
     this.camera = this.threeService.createCamera(width, height, 70, 0.1, 1000);
@@ -49,19 +63,31 @@ export class ThreeLayer implements OnInit, OnDestroy {
 
     const gridHelper = new THREE.GridHelper(200, 500);
     this.scene.add(gridHelper);
-    this.scene.add(new THREE.AxesHelper());
+    // this.scene.add(new THREE.AxesHelper());
 
     this.threeService.createLights();
   }
 
   ngOnInit(): void {
     this.init();
+
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.camera.position.set(this.cameraPosition.x, this.cameraPosition.y, this.cameraPosition.z);
+    this.controls.target.set(
+      this.controlRotation.x,
+      this.controlRotation.y,
+      this.controlRotation.z
+    );
+
     this.renderer.setAnimationLoop(this.animate);
   }
 
   ngOnDestroy(): void {
     this.threeService.dispose();
+
+    if (this.renderer) {
+      this.renderer.setAnimationLoop(null);
+    }
   }
 
   private animate = () => {

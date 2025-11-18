@@ -34,6 +34,10 @@ export class Home {
     throw new Error('Method not implemented.');
   }
 
+  switchChats(evt: PointerEvent) {
+    throw new Error('Method not implemented.');
+  }
+
   sendMessage(): void {
     if (this.message().trim().length > 0) {
       this.openaiService.generateResponse(this.message());

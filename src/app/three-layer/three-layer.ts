@@ -1,4 +1,12 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  inject,
+  Input,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
@@ -16,19 +24,20 @@ export class ThreeLayer implements OnInit, OnDestroy {
   @Input() cameraPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   @Input() controlRotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
 
-  gui = new GUI({ name: 'debug' });
+  public threeService = inject(ThreeService);
+  private tickService = inject(TickService);
 
-  constructor(
-    public threeService: ThreeService,
-    private elementRef: ElementRef,
-    private tickService: TickService
-  ) {}
+  constructor(private elementRef: ElementRef) {}
 
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
-  private clock: THREE.Clock = new THREE.Clock();
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
+
+  private gui = new GUI({ name: 'debug' });
+  public getGUI() {
+    return this.gui;
+  }
 
   private getParentSize() {
     const parent = this.elementRef.nativeElement.parentElement;
@@ -95,10 +104,8 @@ export class ThreeLayer implements OnInit, OnDestroy {
   }
 
   private animate = () => {
-    const delta = this.clock.getDelta();
-
     this.controls.update();
-    this.tickService.tick(delta);
+    this.tickService.tick();
 
     this.renderer.render(this.scene, this.camera);
   };

@@ -26,6 +26,9 @@ import { CharacterConfig, VisemeConfig } from './character.models';
 import { CharacterConfigService } from './character-config.service';
 import { GUI } from 'dat.gui';
 import { OpenaiService } from '@/services/openai';
+import { environment } from '@/environments/environment';
+
+import { GoogleGenAI } from '@google/genai';
 
 /**
  * @class Character
@@ -43,6 +46,11 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
+
+  public emotionService = inject(EmotionService);
+  public speechService = inject(SpeechService);
+  public threeService = inject(ThreeService);
+  private tickService = inject(TickService);
 
   readonly template = input<string>('');
   readonly gui = input<GUI>();
@@ -79,10 +87,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
   private readonly openaiService = inject(OpenaiService);
   constructor(
-    public threeService: ThreeService,
-    public emotionService: EmotionService,
-    public speechService: SpeechService,
-    private tickService: TickService,
     // --- Configuration is injected here ---
     private configService: CharacterConfigService
   ) {
@@ -125,7 +129,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
 
     // --- Load configuration from the service ---
     this.config = await this.configService.getConfig(this.template());
-    console.log(this.config);
     await this.spawn();
 
     // --- Set the default emotion from the loaded config ---
@@ -162,9 +165,9 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.animatorService = new AnimatorService(this.model);
     this.animatorService.setMap(animMap);
 
-    if (this.gui() instanceof GUI) {
+    if (this.gui()) {
       const folder = this.gui()!.addFolder('Character');
-      Object.entries(this).forEach(([key, value]: any) => {
+      Object.entries(this).forEach(([key, value]) => {
         if (typeof value === 'function' && 'set' in value) {
           const signal = value;
           let options;
@@ -175,7 +178,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
             ? folder.add({ value: signal() }, 'value', options)
             : folder.add({ value: signal() }, 'value');
 
-          controller.name(key).onChange((v: any) => signal.set(v));
+          controller.name(key).onChange((v) => signal.set(v));
         }
       });
     }

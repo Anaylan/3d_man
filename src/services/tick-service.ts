@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
 import { Tickable } from '@/interfaces/tickable';
+import * as THREE from 'three';
 
 @Injectable({ providedIn: 'root' })
 export class TickService {
   private subscribers: Set<(deltaTime: number) => void> = new Set();
   private tickableToCallback: Map<Tickable, (deltaTime: number) => void> = new Map();
+  private clock: THREE.Clock = new THREE.Clock();
 
   public registerTickable(tickable: Tickable): void {
     const callback = (dt: number) => tickable.update(dt);
@@ -20,7 +22,8 @@ export class TickService {
     }
   }
 
-  public tick(deltaTime: number): void {
+  public tick(): void {
+    const deltaTime = this.clock.getDelta();
     this.subscribers.forEach((callback) => callback(deltaTime));
   }
 }

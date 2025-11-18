@@ -26,6 +26,8 @@ export type VisemeConfig = Record<
  * @description A comprehensive configuration object for a character.
  */
 export interface CharacterConfig {
+  voice: string;
+  prompt?: string;
   modelPath: string;
   emotions: EmotionConfig[];
   lipsyncSettings: {

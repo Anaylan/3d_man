@@ -1,5 +1,5 @@
-@import 'material-icons/iconfont/material-icons.css';
-@import 'material-symbols';
+@use 'material-icons/iconfont/material-icons.css';
+@use 'material-symbols';
 @reference "tailwindcss";
 
 [contenteditable][data-placeholder]:empty:before {

@@ -1,4 +1,13 @@
-import { Component, OnInit, OnDestroy, signal, computed, effect, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  signal,
+  computed,
+  effect,
+  inject,
+  input,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as THREE from 'three';
@@ -34,6 +43,9 @@ export class Character implements OnInit, OnDestroy, Tickable {
   private animatorService!: AnimatorService;
   private lipsync: Lipsync = new Lipsync();
   private model!: THREE.Object3D<THREE.Object3DEventMap>;
+
+  readonly template = input<string>('');
+  readonly gui = input<GUI>();
 
   // --- All configuration is now provided externally ---
   public config!: CharacterConfig;
@@ -74,14 +86,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
     // --- Configuration is injected here ---
     private configService: CharacterConfigService
   ) {
-    // Effect to auto-select a voice when available
-    effect(() => {
-      const voiceList = this.speechService.voices();
-      if (voiceList?.length && !this.selectedVoice()) {
-        this.selectedVoice.set(voiceList[0].voiceId);
-      }
-    });
-
     effect(() => {
       const audioEl = this.speechService.getAudioElement();
       if (audioEl) {
@@ -89,8 +93,8 @@ export class Character implements OnInit, OnDestroy, Tickable {
       }
     });
 
+    // It's doubtful, but it works.
     this.openaiService.responseGenerated$.subscribe(async (text) => {
-      console.log(text);
       if (text.trim()) {
         await this.speak(text);
       }
@@ -100,7 +104,6 @@ export class Character implements OnInit, OnDestroy, Tickable {
   // --- Component State Signals ---
   debugSpeechText = signal('Hey! How are you doing?');
   selectedEmotion = signal('neutral');
-  selectedVoice = signal('');
   speechSpeed = signal(1);
   volume = signal(1);
   loopAudio = signal(false);
@@ -121,7 +124,8 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.tickService.registerTickable(this);
 
     // --- Load configuration from the service ---
-    this.config = this.configService.getConfig('jennifer');
+    this.config = await this.configService.getConfig(this.template());
+    console.log(this.config);
     await this.spawn();
 
     // --- Set the default emotion from the loaded config ---
@@ -158,22 +162,23 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.animatorService = new AnimatorService(this.model);
     this.animatorService.setMap(animMap);
 
-    const gui = new GUI();
-    Object.entries(this).forEach(([key, value]: any) => {
-      if (typeof value === 'function' && 'set' in value) {
-        const signal = value;
-        let options;
+    if (this.gui() instanceof GUI) {
+      const folder = this.gui()!.addFolder('Character');
+      Object.entries(this).forEach(([key, value]: any) => {
+        if (typeof value === 'function' && 'set' in value) {
+          const signal = value;
+          let options;
 
-        if (key === 'selectedEmotion') options = this.config.emotions.map((e) => e.value);
-        if (key === 'selectedVoice') options = this.speechService.voices().map((e) => e.voiceId);
+          if (key === 'selectedEmotion') options = this.config.emotions.map((e) => e.value);
 
-        const controller = options
-          ? gui.add({ value: signal() }, 'value', options)
-          : gui.add({ value: signal() }, 'value');
+          const controller = options
+            ? folder.add({ value: signal() }, 'value', options)
+            : folder.add({ value: signal() }, 'value');
 
-        controller.name(key).onChange((v: any) => signal.set(v));
-      }
-    });
+          controller.name(key).onChange((v: any) => signal.set(v));
+        }
+      });
+    }
 
     this.tickService.registerTickable(this.animatorService);
   }
@@ -295,7 +300,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   async speak(text: string) {
     await this.speechService.speak({
       text,
-      voice: this.selectedVoice(),
+      voice: this.config.voice,
       rate: this.speechSpeed(),
       volume: this.volume(),
       preservesPitch: this.preservesPitch(),

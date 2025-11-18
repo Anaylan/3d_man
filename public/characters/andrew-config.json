@@ -1,5 +1,5 @@
 {
-  "voice": "fable",
+  "voice": "onyx",
   "modelPath": "/models/Jennifer.glb",
   "emotions": [
     { "value": "neutral", "label": "Neutral", "path": "/animations/jennifer/Idle.fbx" },

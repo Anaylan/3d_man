@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ThreeService } from '@/services/three-service';
 import { TickService } from '@/services/tick-service';
 import { Character } from '../character/character';
+import { GUI } from 'dat.gui';
 
 @Component({
   selector: 'app-three-layer',
@@ -14,6 +15,8 @@ import { Character } from '../character/character';
 export class ThreeLayer implements OnInit, OnDestroy {
   @Input() cameraPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   @Input() controlRotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+
+  gui = new GUI({ name: 'debug' });
 
   constructor(
     public threeService: ThreeService,
@@ -58,12 +61,11 @@ export class ThreeLayer implements OnInit, OnDestroy {
     const { width, height } = this.getParentSize();
 
     this.scene = this.threeService.createScene();
-    this.camera = this.threeService.createCamera(width, height, 70, 0.1, 1000);
+    this.camera = this.threeService.createCamera(width, height, 70, 0.1, 100);
     this.renderer = this.threeService.createRenderer(this.elementRef.nativeElement, width, height);
 
     const gridHelper = new THREE.GridHelper(200, 500);
     this.scene.add(gridHelper);
-    // this.scene.add(new THREE.AxesHelper());
 
     this.threeService.createLights();
   }
@@ -78,6 +80,8 @@ export class ThreeLayer implements OnInit, OnDestroy {
       this.controlRotation.y,
       this.controlRotation.z
     );
+
+    const folder = this.gui.addFolder('Layer');
 
     this.renderer.setAnimationLoop(this.animate);
   }

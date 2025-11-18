@@ -59,7 +59,7 @@ export class SpeechService {
       return audio;
     });
 
-    this.audioQueue.push(audioPromise as any);
+    this.audioQueue.push((await audioPromise)!);
     this.audioQueueLength.set(this.audioQueue.length);
 
     if (!this.isSpeaking()) {
@@ -137,9 +137,9 @@ export class SpeechService {
           voice: options.voice!,
         })
         .subscribe({
-          next: async (buffer: ArrayBuffer) => {
+          next: (buffer: ArrayBuffer) => {
             const blob = new Blob([buffer], { type: 'audio/mpeg' });
-            await this.cacheService.set(key, blob);
+            this.cacheService.set(key, blob);
             resolve(blob);
           },
           error: (error) => {

@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { CharacterConfig } from './character.models';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 
 /**
  * @class CharacterConfigService
@@ -9,27 +11,16 @@ import { CharacterConfig } from './character.models';
  */
 @Injectable({ providedIn: 'root' })
 export class CharacterConfigService {
+  constructor(private http: HttpClient) {}
+
   /**
    * @method getJenniferConfig
    * @description Returns the complete configuration for the character.
    * @returns {CharacterConfig}
    */
-  getConfig(configPath: string): CharacterConfig {
-    return {
-      modelPath: '/models/Avatar.glb',
-      emotions: [
-        { value: 'neutral', label: 'Neutral', path: '/animations/Idle.fbx' },
-        { value: 'happy', label: 'Happy', path: '/animations/Happy.fbx' },
-        { value: 'sad', label: 'Sad', path: '/animations/Rejected.fbx' },
-      ],
-      lipsyncSettings: {
-        smoothing: {
-          vowel: 0.2,
-          consonant: 0.4,
-          silent: .6,
-        },
-        activationThreshold: 0.15,
-      },
-    };
+  async getConfig(configName: string): Promise<CharacterConfig> {
+    return await firstValueFrom(
+      this.http.get<CharacterConfig>(`/characters/${configName}-config.json`)
+    );
   }
 }

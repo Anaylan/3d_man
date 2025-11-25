@@ -40,11 +40,11 @@ export class AnimatorService implements Tickable {
 
     if (action) {
       if (this.currentAction && this.currentAction !== action) {
-        this.currentAction.fadeOut(1);
+        this.currentAction.fadeOut(0.3);
       }
 
       this.currentAction = action;
-      this.currentAction.reset().fadeIn(1).play();
+      this.currentAction.reset().fadeIn(0.3).play();
     }
   }
 

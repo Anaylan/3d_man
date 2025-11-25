@@ -39,3 +39,8 @@ export interface CharacterConfig {
     activationThreshold: number;
   };
 }
+
+export interface PreviewConfig {
+  imgSrc: string;
+  shortName: string;
+}

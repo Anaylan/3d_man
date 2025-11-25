@@ -25,6 +25,7 @@ import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
 import { GUI } from 'dat.gui';
 import { AIService } from '@/services/ai-service';
+import { Subscription } from 'rxjs';
 
 /**
  * @class Character
@@ -47,6 +48,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   public speechService = inject(SpeechService);
   public threeService = inject(ThreeService);
   private tickService = inject(TickService);
+  private openaiSubscription?: Subscription;
 
   readonly gui = input<GUI>();
   // --- All configuration is now provided externally ---
@@ -97,11 +99,9 @@ export class Character implements OnInit, OnDestroy, Tickable {
       this.setEmotion(this.selectedEmotion());
     });
 
-    // It's doubtful, but it works.
-    this.openaiService.responseGenerated$.subscribe(async (text) => {
-      if (text.trim()) {
-        await this.speak(text);
-      }
+    // It's doubtful, but it works
+    this.openaiSubscription = this.openaiService.responseGenerated$.subscribe(async (text) => {
+      if (text.trim()) await this.speak(text);
     });
   }
 
@@ -136,10 +136,23 @@ export class Character implements OnInit, OnDestroy, Tickable {
    */
   ngOnDestroy(): void {
     this.speechService.dispose();
+
+    if (this.model) {
+      this.model.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          (Array.isArray(child.material) ? child.material : [child.material]).forEach((m) =>
+            m?.dispose()
+          );
+        }
+      });
+      this.threeService.getScene().remove(this.model);
+    }
+
     this.tickService.unregisterTickable(this);
-    this.threeService.getScene().remove(this.model);
 
     this.gui()?.removeFolder(this.debug);
+    this.openaiSubscription?.unsubscribe();
 
     if (this.animatorService) {
       this.tickService.unregisterTickable(this.animatorService);

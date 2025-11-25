@@ -18,17 +18,22 @@ import { Character } from '../character/character';
 import { GUI } from 'dat.gui';
 import { ConfigService } from '../character/character-config.service';
 import { HttpClient } from '@angular/common/http';
-import { CharacterConfig } from '../character/character.models';
+import { CharacterConfig, PreviewConfig } from '../character/character.models';
+import { TitleCasePipe } from '@angular/common';
+import { Subject, switchMap, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-three-layer',
-  imports: [],
+  imports: [TitleCasePipe],
   templateUrl: './three-layer.html',
   styleUrl: './three-layer.scss',
 })
 export class ThreeLayer implements OnInit, OnDestroy {
   @Input() cameraPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   @Input() controlRotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+
+  private destroy$ = new Subject<void>();
+  private changeCharacter$ = new Subject<string>();
 
   @ViewChild('container', { read: ViewContainerRef }) container!: ViewContainerRef;
   private characterRef: ComponentRef<Character> | null = null;
@@ -37,7 +42,7 @@ export class ThreeLayer implements OnInit, OnDestroy {
   private tickService = inject(TickService);
   private configService = inject(ConfigService);
 
-  private characters: { shortName: string }[] = new Array();
+  protected characters: PreviewConfig[] = new Array();
   getConfigData() {
     return this.http.get(`/characters/config.json`);
   }
@@ -49,7 +54,7 @@ export class ThreeLayer implements OnInit, OnDestroy {
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
 
-  private gui = new GUI({ name: 'debug' });
+  private gui = new GUI({ name: 'debug', hideable: true });
   public getGUI() {
     return this.gui;
   }
@@ -105,31 +110,37 @@ export class ThreeLayer implements OnInit, OnDestroy {
       this.controlRotation.z
     );
 
-    const folder = this.gui.addFolder('Layer');
-    this.getConfigData().subscribe({
-      next: (data) => {
-        this.characters = data as { shortName: string }[];
+    this.getConfigData()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((data) => {
+        this.characters = data as PreviewConfig[];
+        this.characters?.[0]?.shortName && this.changeCharacter(this.characters[0].shortName);
+      });
 
-        const configSelector = {
-          selectedConfig: this.characters[0]?.shortName || '',
-        };
-
-        folder
-          .add(configSelector, 'selectedConfig')
-          .options(this.characters.map((o) => o.shortName))
-          .name('Configuration')
-          .onChange((value: string) => this.changeCharacter(value));
-
-        this.changeCharacter(this.characters[0].shortName);
-      },
-      error: (err) => console.error(err),
-    });
+    this.changeCharacter$
+      .pipe(
+        switchMap((shortName) => this.configService.getConfig(shortName)),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: (config) => {
+          if (config) {
+            this.destroyCharacter();
+            this.createCharacter(config);
+          }
+        },
+        error: (err) => console.error(err),
+      });
 
     this.renderer.setAnimationLoop(this.animate);
   }
 
   ngOnDestroy(): void {
     this.threeService.dispose();
+
+    if (this.controls) {
+      this.controls.dispose();
+    }
 
     if (this.renderer) {
       this.renderer.setAnimationLoop(null);
@@ -143,12 +154,8 @@ export class ThreeLayer implements OnInit, OnDestroy {
     this.renderer.render(this.scene, this.camera);
   };
 
-  private async changeCharacter(value: string) {
-    const config = await this.configService.getConfig(value);
-    if (config) {
-      this.destroyCharacter();
-      this.createCharacter(config);
-    }
+  protected async changeCharacter(value: string) {
+    this.changeCharacter$.next(value);
   }
 
   private destroyCharacter(): void {

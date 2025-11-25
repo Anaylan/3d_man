@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { CharacterConfig } from './character.models';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 /**
  * @class CharacterConfigService

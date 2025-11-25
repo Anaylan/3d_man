@@ -1,2 +1,22 @@
 <ng-container #container>
 </ng-container>
+<div class="absolute z-[100] top-8 right-8 inline-flex shadow-xs -space-x-px gap-2">
+    @for (item of characters; track $index) {
+    <div class="relative group" (click)="changeCharacter(item.shortName)">
+        <div
+            class="h-12 w-12 rounded-lg flex items-center justify-center bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 transition-all duration-200 active:scale-95 hover:shadow-md overflow-hidden cursor-pointer">
+            <img [src]="item.imgSrc" [alt]="item.shortName"
+                class="h-full w-full object-cover rounded-lg group-hover:scale-110 transition-transform duration-200">
+        </div>
+
+        <!-- Tooltip -->
+        <div
+            class="absolute right-full top-1/2 -translate-y-1/2 mr-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+            <div
+                class="bg-slate-900 dark:bg-slate-800 text-white text-sm px-3 py-2 rounded-lg shadow-xl whitespace-nowrap">
+                {{item.shortName | titlecase}}
+            </div>
+        </div>
+    </div>
+    }
+</div>

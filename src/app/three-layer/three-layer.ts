@@ -1,11 +1,14 @@
 import {
   Component,
+  ComponentRef,
   ElementRef,
   HostListener,
   inject,
   Input,
   OnDestroy,
   OnInit,
+  ViewChild,
+  ViewContainerRef,
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -13,10 +16,13 @@ import { ThreeService } from '@/services/three-service';
 import { TickService } from '@/services/tick-service';
 import { Character } from '../character/character';
 import { GUI } from 'dat.gui';
+import { ConfigService } from '../character/character-config.service';
+import { HttpClient } from '@angular/common/http';
+import { CharacterConfig } from '../character/character.models';
 
 @Component({
   selector: 'app-three-layer',
-  imports: [Character],
+  imports: [],
   templateUrl: './three-layer.html',
   styleUrl: './three-layer.scss',
 })
@@ -24,10 +30,19 @@ export class ThreeLayer implements OnInit, OnDestroy {
   @Input() cameraPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   @Input() controlRotation: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
 
+  @ViewChild('container', { read: ViewContainerRef }) container!: ViewContainerRef;
+  private characterRef: ComponentRef<Character> | null = null;
+
   public threeService = inject(ThreeService);
   private tickService = inject(TickService);
+  private configService = inject(ConfigService);
 
-  constructor(private elementRef: ElementRef) {}
+  private characters: { shortName: string }[] = new Array();
+  getConfigData() {
+    return this.http.get(`/characters/config.json`);
+  }
+
+  constructor(private elementRef: ElementRef, private http: HttpClient) {}
 
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
@@ -91,6 +106,24 @@ export class ThreeLayer implements OnInit, OnDestroy {
     );
 
     const folder = this.gui.addFolder('Layer');
+    this.getConfigData().subscribe({
+      next: (data) => {
+        this.characters = data as { shortName: string }[];
+
+        const configSelector = {
+          selectedConfig: this.characters[0]?.shortName || '',
+        };
+
+        folder
+          .add(configSelector, 'selectedConfig')
+          .options(this.characters.map((o) => o.shortName))
+          .name('Configuration')
+          .onChange((value: string) => this.changeCharacter(value));
+
+        this.changeCharacter(this.characters[0].shortName);
+      },
+      error: (err) => console.error(err),
+    });
 
     this.renderer.setAnimationLoop(this.animate);
   }
@@ -109,4 +142,25 @@ export class ThreeLayer implements OnInit, OnDestroy {
 
     this.renderer.render(this.scene, this.camera);
   };
+
+  private async changeCharacter(value: string) {
+    const config = await this.configService.getConfig(value);
+    if (config) {
+      this.destroyCharacter();
+      this.createCharacter(config);
+    }
+  }
+
+  private destroyCharacter(): void {
+    if (this.characterRef) {
+      this.characterRef.destroy();
+    }
+    this.container.clear();
+  }
+
+  private async createCharacter(config: CharacterConfig) {
+    this.characterRef = this.container.createComponent(Character);
+    this.characterRef.setInput('config', config);
+    this.characterRef.setInput('gui', this.gui);
+  }
 }

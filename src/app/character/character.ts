@@ -23,12 +23,8 @@ import { SpeechService } from '@/services/speech-service';
 import { ThreeService } from '@/services/three-service';
 import { Tickable } from '../../interfaces/tickable';
 import { CharacterConfig, VisemeConfig } from './character.models';
-import { CharacterConfigService } from './character-config.service';
 import { GUI } from 'dat.gui';
-import { OpenaiService } from '@/services/openai';
-import { environment } from '@/environments/environment';
-
-import { GoogleGenAI } from '@google/genai';
+import { AIService } from '@/services/ai-service';
 
 /**
  * @class Character
@@ -52,20 +48,21 @@ export class Character implements OnInit, OnDestroy, Tickable {
   public threeService = inject(ThreeService);
   private tickService = inject(TickService);
 
-  readonly template = input<string>('');
   readonly gui = input<GUI>();
-
   // --- All configuration is now provided externally ---
-  public config!: CharacterConfig;
-
-  readonly AUDIO_CLIPS: Map<string, string> = new Map([
-    ['Hey there! How are you today?', '/audio/1.mp3'],
-    ['Hi! Great to see you again.', '/audio/2.mp3'],
-    ["What's up? How can I help?", '/audio/3.mp3'],
-    ["My name's Jennifer - I'm your friendly AI assistant.", '/audio/4.mp3'],
-    ["Whoa! That's awesome!", '/audio/5.mp3'],
-    ['Bravo! Well done!', '/audio/6.mp3'],
-  ]);
+  readonly config = input<CharacterConfig>({
+    voice: '',
+    modelPath: '',
+    emotions: [],
+    lipsyncSettings: {
+      smoothing: {
+        vowel: 0,
+        consonant: 0,
+        silent: 0,
+      },
+      activationThreshold: 0,
+    },
+  });
 
   readonly VISEME_DETAILS: VisemeConfig = {
     viseme_PP: { type: 'consonant' },
@@ -85,16 +82,19 @@ export class Character implements OnInit, OnDestroy, Tickable {
     viseme_sil: { type: 'silent' },
   };
 
-  private readonly openaiService = inject(OpenaiService);
-  constructor(
-    // --- Configuration is injected here ---
-    private configService: CharacterConfigService
-  ) {
+  private readonly openaiService = inject(AIService);
+  private debug!: GUI;
+
+  constructor() {
     effect(() => {
       const audioEl = this.speechService.getAudioElement();
       if (audioEl) {
         this.lipsync.connectAudio(audioEl);
       }
+    });
+
+    effect(() => {
+      this.setEmotion(this.selectedEmotion());
     });
 
     // It's doubtful, but it works.
@@ -116,7 +116,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   // --- Computed property to derive status from the config ---
   currentStatus = computed(() => {
     const emotion = this.emotionService.currentEmotion();
-    const emotionData = this.config?.emotions.find((e) => e.value === emotion);
+    const emotionData = this.config().emotions.find((e) => e.value === emotion);
     return emotionData?.label || emotion;
   });
 
@@ -127,14 +127,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
   async ngOnInit(): Promise<void> {
     this.tickService.registerTickable(this);
 
-    // --- Load configuration from the service ---
-    this.config = await this.configService.getConfig(this.template());
     await this.spawn();
-
-    // --- Set the default emotion from the loaded config ---
-    if (this.config.emotions.length > 0) {
-      await this.setEmotion(this.config.emotions[0].value);
-    }
   }
 
   /**
@@ -144,6 +137,9 @@ export class Character implements OnInit, OnDestroy, Tickable {
   ngOnDestroy(): void {
     this.speechService.dispose();
     this.tickService.unregisterTickable(this);
+    this.threeService.getScene().remove(this.model);
+
+    this.gui()?.removeFolder(this.debug);
 
     if (this.animatorService) {
       this.tickService.unregisterTickable(this.animatorService);
@@ -156,27 +152,28 @@ export class Character implements OnInit, OnDestroy, Tickable {
    */
   private async spawn() {
     const loader = new EntityLoader(GLTFLoader);
-    const { scene: model } = await loader.loadObjectAsync(this.config.modelPath);
+    const { scene: model } = await loader.loadObjectAsync(this.config().modelPath);
 
     this.model = model;
     this.threeService.getScene().add(this.model);
 
-    const animMap = new Map(this.config.emotions.map(({ value, path }) => [value, path]));
     this.animatorService = new AnimatorService(this.model);
-    this.animatorService.setMap(animMap);
+    this.animatorService.setMap(
+      new Map(this.config().emotions.map(({ value, path }) => [value, path]))
+    );
 
     if (this.gui()) {
-      const folder = this.gui()!.addFolder('Character');
+      this.debug = this.gui()!.addFolder('Character');
       Object.entries(this).forEach(([key, value]) => {
         if (typeof value === 'function' && 'set' in value) {
           const signal = value;
           let options;
 
-          if (key === 'selectedEmotion') options = this.config.emotions.map((e) => e.value);
+          if (key === 'selectedEmotion') options = this.config().emotions.map((e) => e.value);
 
           const controller = options
-            ? folder.add({ value: signal() }, 'value', options)
-            : folder.add({ value: signal() }, 'value');
+            ? this.debug.add({ value: signal() }, 'value', options)
+            : this.debug.add({ value: signal() }, 'value');
 
           controller.name(key).onChange((v) => signal.set(v));
         }
@@ -231,10 +228,10 @@ export class Character implements OnInit, OnDestroy, Tickable {
       }
     }
 
-    const threshold = this.config.lipsyncSettings.activationThreshold;
+    const threshold = this.config().lipsyncSettings.activationThreshold;
     const activeViseme = maxScore > threshold ? dominantViseme : VISEMES.sil;
 
-    const speeds = this.config.lipsyncSettings.smoothing;
+    const speeds = this.config().lipsyncSettings.smoothing;
 
     for (const visemeName of allVisemes) {
       const targetValue = visemeName === activeViseme ? 1.0 : 0.0;
@@ -267,43 +264,10 @@ export class Character implements OnInit, OnDestroy, Tickable {
     });
   }
 
-  async onKeyDown(event: KeyboardEvent) {
-    if (event.code === 'Space' || event.key === ' ') {
-      const text = this.debugSpeechText().trim();
-      if (!text) return;
-
-      const words = text.split(/\s+/);
-      const lastWord = words.at(-1);
-      if (!lastWord) return;
-
-      await this.speak(lastWord);
-    }
-  }
-
-  async speakStream(textStream: ReadableStream<string>) {
-    const reader = textStream.getReader();
-
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        if (value?.trim()) {
-          await this.speak(value);
-        }
-      }
-    } catch (error) {
-      console.error('Error reading text stream:', error);
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
   async speak(text: string) {
     await this.speechService.speak({
       text,
-      voice: this.config.voice,
+      voice: this.config().voice,
       rate: this.speechSpeed(),
       volume: this.volume(),
       preservesPitch: this.preservesPitch(),
@@ -314,12 +278,7 @@ export class Character implements OnInit, OnDestroy, Tickable {
     this.speechService.stop();
   }
 
-  onEmotionChange() {
-    this.setEmotion(this.selectedEmotion());
-  }
-
   async setEmotion(emotion: string) {
-    this.selectedEmotion.set(emotion);
     this.emotionService.setEmotion(emotion);
 
     for (let i = 0; i < 100; i++) {
@@ -331,26 +290,48 @@ export class Character implements OnInit, OnDestroy, Tickable {
     }
   }
 
-  async onAudioItemClick(item: [string, string]) {
-    const audioEl =
-      this.speechService.audioElement() ??
-      (() => {
-        const newAudio = new Audio();
-        this.speechService.audioElement.set(newAudio);
-        return newAudio;
-      })();
+  readonly AUDIO_CLIPS: Map<string, string> = new Map([
+    ['Hey there! How are you today?', '/audio/1.mp3'],
+    ['Hi! Great to see you again.', '/audio/2.mp3'],
+    ["What's up? How can I help?", '/audio/3.mp3'],
+    ["My name's Jennifer - I'm your friendly AI assistant.", '/audio/4.mp3'],
+    ["Whoa! That's awesome!", '/audio/5.mp3'],
+    ['Bravo! Well done!', '/audio/6.mp3'],
+  ]);
 
-    audioEl.pause();
-    audioEl.currentTime = 0;
-    audioEl.loop = this.loopAudio();
+  // async onKeyDown(event: KeyboardEvent) {
+  //   if (event.code === 'Space' || event.key === ' ') {
+  //     const text = this.debugSpeechText().trim();
+  //     if (!text) return;
 
-    this.speechService.configureAudio(audioEl, item[1], {
-      rate: this.speechSpeed(),
-      volume: this.volume(),
-      preservesPitch: this.preservesPitch(),
-    });
+  //     const words = text.split(/\s+/);
+  //     const lastWord = words.at(-1);
+  //     if (!lastWord) return;
 
-    this.speechService.isSpeaking.set(true);
-    await audioEl.play();
-  }
+  //     await this.speak(lastWord);
+  //   }
+  // }
+
+  // async onAudioItemClick(item: [string, string]) {
+  //   const audioEl =
+  //     this.speechService.audioElement() ??
+  //     (() => {
+  //       const newAudio = new Audio();
+  //       this.speechService.audioElement.set(newAudio);
+  //       return newAudio;
+  //     })();
+
+  //   audioEl.pause();
+  //   audioEl.currentTime = 0;
+  //   audioEl.loop = this.loopAudio();
+
+  //   this.speechService.configureAudio(audioEl, item[1], {
+  //     rate: this.speechSpeed(),
+  //     volume: this.volume(),
+  //     preservesPitch: this.preservesPitch(),
+  //   });
+
+  //   this.speechService.isSpeaking.set(true);
+  //   await audioEl.play();
+  // }
 }

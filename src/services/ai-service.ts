@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { environment } from '@/environments/environment';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { from, Observable, Subject } from 'rxjs';
 import { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 
@@ -31,15 +32,18 @@ export interface SpeechOptions {
 @Injectable({
   providedIn: 'root',
 })
-export class OpenaiService {
-  private apiKey = environment.OPENAI_API_KEY;
-  private openai: OpenAI;
+export class AIService {
+  private openai: OpenAI = new OpenAI({
+    apiKey: environment.OPENAI_API_KEY,
+    dangerouslyAllowBrowser: true,
+    maxRetries: 0,
+  });
+  private ai = new GoogleGenAI({ apiKey: environment.GOOGLE_API_KEY });
+
   public responseGenerated$ = new Subject<string>();
   private conversationHistory: Array<ChatCompletionMessageParam> = [];
 
-  constructor() {
-    this.openai = new OpenAI({ apiKey: this.apiKey, dangerouslyAllowBrowser: true, maxRetries: 0 });
-  }
+  constructor() {}
 
   generateResponse(prompt: string): void {
     (async () => {

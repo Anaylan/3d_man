@@ -1,4 +1,4 @@
-import { OpenaiService, VoiceOption } from '@/services/openai';
+import { AIService, VoiceOption } from '@/services/ai-service';
 import { inject, Injectable, signal } from '@angular/core';
 import { CacheService } from './cache-service';
 
@@ -21,7 +21,7 @@ export class SpeechService {
 
   // --- Private Dependencies ---
   private readonly cacheService = inject(CacheService);
-  private readonly openaiService = inject(OpenaiService);
+  private readonly AIService = inject(AIService);
 
   // --- Streaming State ---
   private audioQueue: HTMLAudioElement[] = [];
@@ -35,6 +35,7 @@ export class SpeechService {
 
     const key = `${options.voice || 'default'}: ${options.text}`;
 
+    // bullshit
     const audioPromise = this._getOrGenerateAudio(key, options).then((blob) => {
       if (blob.size === 0) return null;
 
@@ -132,21 +133,19 @@ export class SpeechService {
 
   private _generateAndCacheAudio(key: string, options: SpeechSynthesisOptions): Promise<Blob> {
     return new Promise((resolve) => {
-      this.openaiService
-        .generateSpeech(options.text!, {
-          voice: options.voice!,
-        })
-        .subscribe({
-          next: (buffer: ArrayBuffer) => {
-            const blob = new Blob([buffer], { type: 'audio/mpeg' });
-            this.cacheService.set(key, blob);
-            resolve(blob);
-          },
-          error: (error) => {
-            console.error('Error generating speech:', error);
-            resolve(new Blob([], { type: 'audio/mpeg' }));
-          },
-        });
+      this.AIService.generateSpeech(options.text!, {
+        voice: options.voice!,
+      }).subscribe({
+        next: (buffer: ArrayBuffer) => {
+          const blob = new Blob([buffer], { type: 'audio/mpeg' });
+          this.cacheService.set(key, blob);
+          resolve(blob);
+        },
+        error: (error) => {
+          console.error('Error generating speech:', error);
+          resolve(new Blob([], { type: 'audio/mpeg' }));
+        },
+      });
     });
   }
 
@@ -176,7 +175,7 @@ export class SpeechService {
   }
 
   private loadVoices(): void {
-    this.voices.set(this.openaiService.getVoices());
+    this.voices.set(this.AIService.getVoices());
   }
 
   public getAudioElement(): HTMLAudioElement | null {

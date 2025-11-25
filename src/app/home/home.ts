@@ -2,7 +2,7 @@ import { Component, inject, signal, ViewChild } from '@angular/core';
 import { ThreeLayer } from '../three-layer/three-layer';
 import { FormsModule } from '@angular/forms';
 import { ContenteditableDirective } from '../contenteditable-model';
-import { OpenaiService } from '@/services/openai';
+import { AIService } from '@/services/ai-service';
 
 @Component({
   selector: 'app-home',
@@ -12,7 +12,7 @@ import { OpenaiService } from '@/services/openai';
 })
 export class Home {
   @ViewChild('threelayerRef') layerComponentRef!: ThreeLayer;
-  private readonly openaiService = inject(OpenaiService);
+  private readonly AIService = inject(AIService);
 
   message = signal('');
 
@@ -40,7 +40,7 @@ export class Home {
 
   sendMessage(): void {
     if (this.message().trim().length > 0) {
-      this.openaiService.generateResponse(this.message());
+      this.AIService.generateResponse(this.message());
       this.message.set('');
     }
   }

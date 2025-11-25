@@ -1,6 +1,6 @@
 {
   "voice": "onyx",
-  "modelPath": "/models/Jennifer.glb",
+  "modelPath": "/models/Andrew.glb",
   "emotions": [
     { "value": "neutral", "label": "Neutral", "path": "/animations/jennifer/Idle.fbx" },
     { "value": "happy", "label": "Happy", "path": "/animations/jennifer/Happy.fbx" },

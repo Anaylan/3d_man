@@ -10,7 +10,7 @@ import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
  * allowing the Character component to be fully generic.
  */
 @Injectable({ providedIn: 'root' })
-export class CharacterConfigService {
+export class ConfigService {
   constructor(private http: HttpClient) {}
 
   /**
